@@ -1,0 +1,6 @@
+scholarly>=1.7.11
+wikipedia>=1.4.0
+beautifulsoup4>=4.12.3
+lru_cache>=0.2.3
+numpy>=1.26.4
+playwright>=1.43.0
