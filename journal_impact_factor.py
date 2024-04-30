@@ -14,21 +14,20 @@ def get_impact_factor(journal_name):
     impact_factor = fetch_if_from_wikipedia(journal_name) # E.g., https://en.wikipedia.org/wiki/Global_Change_Biology
     if impact_factor is not None:
         return impact_factor
-    impact_factor = asyncio.run(fetch_if_from_bioxbio("Nature"))
+    impact_factor = asyncio.run(fetch_if_from_bioxbio(journal_name))
     if impact_factor is not None:
         return impact_factor
     return None
-    
 
+@lru_cache(maxsize=1000)
 def fetch_if_from_wikipedia(journal_name):
-    journal_name = journal_name
     try:
         # Search for the page by journal name
         page = wikipedia.page(journal_name)
         
         # Access the content of the page
         html_content = page.html()
-        soup = BeautifulSoup(html_content, 'html.parser')
+        soup = BeautifulSoup(html_content, 'html.parser') # or html.parser or lxml
 
         # Find the table row ('tr') where the 'th' (table header) contains the text 'Impact factor'
         impact_factor_row = soup.find('th', string='Impact factor')
@@ -38,7 +37,7 @@ def fetch_if_from_wikipedia(journal_name):
             # Get the next sibling 'td' which contains the impact factor
             impact_factor_data = impact_factor_row.find_next_sibling('td')
             if impact_factor_data:
-                impact_factor_data_array = impact_factor_data.text.split(' ')
+                impact_factor_data_array = impact_factor_data.text.strip().split(' ')
                 impact_factor = impact_factor_data_array[0].strip()
                 #year = impact_factor_data_array[1].strip().replace('(', '').replace(')', '')
                 return impact_factor
@@ -46,19 +45,22 @@ def fetch_if_from_wikipedia(journal_name):
                 print("Impact factor not found.")
                 return None
         else:
-            print("Impact factor row not found.")
+            print(f"Impact factor row not found for wikipedia page: {journal_name}")
             return None
     except wikipedia.exceptions.PageError:
         print(f"Wikipedia page not found. {journal_name}")
         return None
     except wikipedia.exceptions.DisambiguationError as e:
-        print(f"Disambiguation error, multiple entries found for '{journal_name}': {e.options}")
-        # Automatically select a page if one of the options matches certain criteria
-        correct_page = next((option for option in e.options if "journal" in option.lower()), None)
-        if correct_page:
-            page = wikipedia.page(correct_page)
-        else:
-            return None
+        # Attempt to find a relevant page from disambiguation options
+        for option in e.options:
+            if "journal" in option.lower():
+                try:
+                    return fetch_if_from_wikipedia(option)  # Attempt to fetch from the first matching option
+                except wikipedia.exceptions.DisambiguationError:
+                    continue  # Continue if nested disambiguation error occurs
+            
+        print(f"Wikipedia page not found - Disambiguation error for '{journal_name}': {e.options}")
+        return None
     except Exception as e:
         print(f"An error occurred: {e}")
         return None

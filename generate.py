@@ -35,21 +35,26 @@ try:
         standardised_authors = standardise_authors(authors)
         filled_pub['authors_standardised'] = standardised_authors
 
-        # Get DOI
-        print(f"Getting DOI for {pub_url}")
-        doi = get_doi(pub_url)
-        print(f"DOI: {doi}")
-        filled_pub['doi'] = doi if doi else ""
+        if not "symposium" in journal_name or not "conference" in journal_name or not "workshop" in journal_name or not "annual meeting" in journal_name:
+            # Get DOI
+            print(f"Getting DOI for {pub_url}")
+            doi = get_doi(pub_url)
+            print(f"DOI: {doi}")
+            filled_pub['doi'] = doi if doi else ""
 
-        # Get Impact Factor
-        impact_factor = None
-        if journal_name:
-            print(f"Getting impact factor for {journal_name}")
-            impact_factor = get_impact_factor(journal_name.lower())
-            print(f"Impact factor: {impact_factor}")
-        else:
-            print("Journal name not found")
-        filled_pub['impact_factor'] = impact_factor
+            # Get Impact Factor
+            impact_factor = None
+            if journal_name and journal_name != "Null":
+                print(f"Getting impact factor for {journal_name}")
+                impact_factor = get_impact_factor(journal_name.lower())
+                print(f"Impact factor: {impact_factor}")
+            else:
+                print(f"Journal name not found: {journal_name}")
+            filled_pub['impact_factor'] = impact_factor
+        else: 
+            print(f"Skipping DOI and Impact Factor for symposium, conference, workshop, or annual meeting: {journal_name}")
+            filled_pub['doi'] = ""
+            filled_pub['impact_factor'] = ""
 
         # Add to list of processed publications
         filled_publications.append(filled_pub)

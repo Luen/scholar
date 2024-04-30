@@ -1,11 +1,14 @@
 import time
 import json
 import re
+import io
 import urllib.request
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from standardise import levenshtein
 import asyncio
 from playwright.async_api import async_playwright
+import pdfplumber
+
 
 def get_doi(url):
     # Extract DOI URL e.g., https://onlinelibrary.wiley.com/doi/abs/10.1111/gcb.12455 which has the 10.1111/gcb.12455 (https://doi.org/10.1111/gcb.12455)
@@ -13,10 +16,16 @@ def get_doi(url):
     if doi_in_url:
         return doi_in_url
     
+    # e.g., https://scholar.google.com/scholar?cluster=4186906934658759747&hl=en&oi=scholarr
+    if "scholar.google.com" in url:
+        print("Google Scholar URL, so not expecting a DOI. Skipping")
+        return None
+    
     slug = url.split('/')[-1]
-    html = get_page_html_from_urllib(url)
+    html = get_url_content_using_urllib(url)
     if html is None:
-        html = asyncio.run(get_page_html_from_browser(url))
+        print(f"Trying to fetch content via browser {url}")
+        html = asyncio.run(get_url_content_using_browser(url))
     if html is None:
         return None
     
@@ -38,22 +47,55 @@ def get_doi(url):
 
     return None
 
-def get_page_html_from_urllib(url):
+def get_content_from_pdf(pdf_bytes, url):
+    try:
+        pdf_file = io.BytesIO(pdf_bytes)
+        with pdfplumber.open(pdf_file) as pdf:
+            # get page from url hash - e.g., https://repository.library.noaa.gov/view/noaa/42440/noaa_42440_DS1.pdf#page=124
+            page_num = url.split("#page=")[-1] if "#page=" in url else None
+            if page_num:
+                if not page_num.isdigit():
+                    print(f"Invalid page number: {page_num}")
+                    return None
+                try:
+                    target_page = pdf.pages[int(page_num) - 1]  # Convert page number from 1-based to 0-based index
+                    return target_page.extract_text()
+                except IndexError:
+                    print(f"Page {page_num} not found in PDF")
+                    return None
+            else:
+                text = ""
+                for page in pdf.pages:
+                    text += page.extract_text()
+                return text
+    except Exception as e:
+        print(f"An error occurred while extracting text from PDF: {e}")
+        return None
+    
+def get_url_content_using_urllib(url):
     headers = {"User-Agent": "Mozilla/5.0"}
     req = urllib.request.Request(url, headers=headers)
     try:
-        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor())
-        response = opener.open(req, timeout=100)
-        html = response.read().decode('utf-8')
-        response.close()
-        return html
+        with urllib.request.build_opener(urllib.request.HTTPCookieProcessor()).open(req) as response:
+            content_type = response.headers.get('Content-Type', '')
+            content = response.read()
+            if 'application/pdf' in content_type or '.pdf' in url:
+                print(f"Extracting text from PDF {url}")
+                return get_content_from_pdf(content, url)
+            elif 'text/html' in content_type:
+                return content.decode('utf-8')
+            else:
+                print(f"Unsupported content type: {content_type}")
+                return None
     except HTTPError as err:
-        print(f"Error fetching HTML from {url}: {err}")
+        print(f"Error fetching content from {url}: {err}")
+        return None
+    except UnicodeDecodeError as e:
+        print(f"Decode error: {e}")
         return None
 
-async def get_page_html_from_browser(url):
+async def get_url_content_using_browser(url):
     try:
-        print(f"Fetching DOI via browser from {url}")
         async with async_playwright() as p:
             # Launch the browser
             browser = await p.chromium.launch(headless=True)
@@ -103,10 +145,13 @@ def normalise_url(url):
         url = url.replace(old, new)
     return url.split("?")[0]
 
+
 def extract_doi_from_url(url):
     # Regex pattern to find DOI in URL
     # DOI starts with 10 and can contain digits or dots, followed by a slash and a character sequence
-    doi_pattern = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+'
+    #doi_pattern = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+'
+    # https://journals.biologists.com/jeb/article-pdf/doi/10.1242/jeb.243973/2170187/jeb243973.pdf
+    doi_pattern = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+(?![.][a-z]+)'
     match = re.search(doi_pattern, url, re.IGNORECASE)
 
     if match:
@@ -114,6 +159,7 @@ def extract_doi_from_url(url):
     else:
         return None
 
+# Verify the DOI against the URL
 def check_doi_via_api(doi, expected_url):
     api_url = f"https://doi.org/api/handles/{doi}"
     try:
@@ -124,7 +170,11 @@ def check_doi_via_api(doi, expected_url):
                 if value["type"] == "URL" and normalise_url(value["data"]["value"]) == normalise_url(expected_url):
                     return True
     except Exception as e:
-        print(f"Failed to verify DOI {doi} against {expected_url}: {e}")
+        url = None
+        for value in data["values"]:
+            if value["type"] == "URL":
+                url = value["data"]["value"]
+        print(f"Failed to verify DOI {doi}. URL {url} does not match the expected URL {expected_url}: {e}")
     return False
 
 def check_doi_via_redirect(doi, expected_url, expected_html, attempts=1):
@@ -168,4 +218,3 @@ def shortDOI(doi):
     # shortUrl= doi if doi.startswith(BASE_URL) else BASE_URL+doi
     shortDOI = doi.replace(BASE_URL, "")
     return shortDOI
-
