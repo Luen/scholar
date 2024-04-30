@@ -23,8 +23,9 @@ try:
     filled_publications = []
 
     # Process each publication
-    for pub in author["publications"]:
-        print(f"Processing publication: {pub['bib']['title']}")
+    for index, pub in enumerate(author["publications"]):
+        #publication number of the publications
+        print(f"Processing publication {index+1}/{len(author['publications'])}: {pub['bib']['title']}")
 
         filled_pub = scholarly.fill(pub)
         pub_url = filled_pub.get('pub_url', '')
@@ -39,7 +40,7 @@ try:
             # Get DOI
             print(f"Getting DOI for {pub_url}")
             doi = get_doi(pub_url)
-            print(f"DOI: {doi}")
+            print(f"DOI: https://doi.org/{doi}")
             filled_pub['doi'] = doi if doi else ""
 
             # Get Impact Factor
@@ -47,7 +48,7 @@ try:
             if journal_name and journal_name != "Null":
                 print(f"Getting impact factor for {journal_name}")
                 impact_factor = get_impact_factor(journal_name.lower())
-                print(f"Impact factor: https://doi.org/{impact_factor}")
+                print(f"Impact factor: {impact_factor}")
             else:
                 print(f"Journal name not found: {journal_name}")
             filled_pub['impact_factor'] = impact_factor
