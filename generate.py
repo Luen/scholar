@@ -47,7 +47,7 @@ try:
             if journal_name and journal_name != "Null":
                 print(f"Getting impact factor for {journal_name}")
                 impact_factor = get_impact_factor(journal_name.lower())
-                print(f"Impact factor: {impact_factor}")
+                print(f"Impact factor: https://doi.org/{impact_factor}")
             else:
                 print(f"Journal name not found: {journal_name}")
             filled_pub['impact_factor'] = impact_factor

@@ -170,11 +170,14 @@ def check_doi_via_api(doi, expected_url):
                 if value["type"] == "URL" and normalise_url(value["data"]["value"]) == normalise_url(expected_url):
                     return True
     except Exception as e:
+        # Extract URL if possible from the data dictionary regardless of the error location
         url = None
-        for value in data["values"]:
+        for value in data.get("values", []):  # Safely iterate with a default empty list if data is not initialized
             if value["type"] == "URL":
                 url = value["data"]["value"]
-        print(f"Failed to verify DOI {doi}. URL {url} does not match the expected URL {expected_url}: {e}")
+                break  # Break after finding the first URL, assuming only one is needed for the log
+        print(f"Failed to verify DOI {doi}. Retrieved URL {url} does not match the expected URL {expected_url}: {e}")
+
     return False
 
 def check_doi_via_redirect(doi, expected_url, expected_html, attempts=1):
