@@ -210,7 +210,9 @@ def extract_doi_from_url(url):
     # DOI starts with 10 and can contain digits or dots, followed by a slash and a character sequence
     #doi_pattern = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+'
     # https://journals.biologists.com/jeb/article-pdf/doi/10.1242/jeb.243973/2170187/jeb243973.pdf
-    doi_pattern = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+(?![.][a-z]+)'
+    # https://www.frontiersin.org/articles/10.3389/fmars.2021.724913/full?trk=public_post_comment-text
+    # doi_pattern = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+(?![.][a-z]+)'
+    doi_pattern = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+?(?=/|$|\.pdf)'
     match = re.search(doi_pattern, url, re.IGNORECASE)
 
     if match:
@@ -327,4 +329,5 @@ def get_doi_short_link(doi_short):
     if not doi_short:
         return None
     return "https://doi.org/" + doi_short
+
 

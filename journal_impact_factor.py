@@ -12,6 +12,8 @@ wikipedia = MediaWiki()
 
 @lru_cache(maxsize=1000)
 def get_impact_factor(journal_name):
+    if not journal_name or journal_name == "Null":
+        return None
     impact_factor = fetch_if_from_wikipedia(journal_name+" (journal)") # E.g., https://en.wikipedia.org/wiki/Nature_(journal)
     if impact_factor is not None:
         return impact_factor

@@ -14,6 +14,14 @@ def test_get_doi():
 #print(get_doi("https://www.sciencedirect.com/science/article/pii/S1095643313002031"))
 #print(get_doi("https://repository.library.noaa.gov/view/noaa/42440/noaa_42440_DS1.pdf#page=124"))
 #print(get_doi("https://repository.library.noaa.gov/view/noaa/42440/noaa_42440_DS1.pdf"))
+
+#test = get_doi("https://www.frontiersin.org/articles/10.3389/fmars.2021.724913/full?trk=public_post_comment-text")
+#print(test)
+#print(get_doi_short(test))
+#test = get_doi("https://journals.biologists.com/jeb/article-pdf/doi/10.1242/jeb.243973/2170187/jeb243973.pdf")
+#print(test)
+#print(get_doi_short(test))
+
 # https://www.researchgate.net/profile/Gael-Lecellier/publication/329841906_Distribution_patterns_of_ocellated_eagle_rays_Aetobatus_ocellatus_along_two_sites_in_Moorea_Island_French_Polynesia/links/5ef14ac5299bf1faac6f23ae/Distribution-Patterns-of-Ocellated-Eagle-Rays-Aetobatus-Ocellatus-along-Two-Sites-in-Moorea-Island-French-Polynesia.pdf
 # https://sfi-cybium.fr/sites/default/files/pdfs-cybium/19-Berthe%20949%20%5B402%5D181-184.pdf\
 # https://scholar.google.com/scholar?cluster=4186906934658759747&hl=en&oi=scholarr
