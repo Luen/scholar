@@ -26,7 +26,6 @@ def test_get_doi():
 #Optimism_and_opportunities_for_conservation_physiology_in_the_Anthropocenea_synthesis_and_conclusions.pdf 10.1093/conphys/cot001
 #DOI: 10.1093/oso/9780198843610.003.0019OUP
 
-
 #doi = '10.1111/gcb.12455'
 #print(get_doi_link(doi))
 #print(get_doi_short(doi))

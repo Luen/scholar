@@ -30,7 +30,8 @@ def get_doi(url):
     if html is None:
         return None
     
-    dois = parse_dois(html) # Parse the page for DOIs
+    # Parse the page for DOIs
+    dois = parse_dois(html)
 
     if dois:
         if len(dois) == 1: # If there is only one DOI, return it
@@ -98,17 +99,66 @@ def get_url_content_using_urllib(url):
 
 @lru_cache(maxsize=1000)
 async def get_url_content_using_browser(url):
+    browser = None  # Ensure the browser variable is accessible for the finally block
     try:
         async with async_playwright() as p:
-            # Launch the browser
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
+            # Launch the browser in headless mode
+            # Note that some websites may block headless browsers e.g., https://www.sciencedirect.com/science/article/pii/S1095643313002031
+            browser = await p.chromium.launch(
+                headless=True,
+                args=[
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-infobars',
+                    '--disable-blink-features=AutomationControlled',
+                    '--window-position=0,0',
+                    '--ignore-certificate-errors',
+                    '--ignore-certificate-errors-spki-list'
+                ]
+            )
+            # Create a new context with a custom user agent
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                viewport={'width': 1280, 'height': 1280}
+            )
+            page = await context.new_page()
+
+            # Modify WebGL and Navigator properties to avoid detection
+            await page.add_init_script("""
+            navigator.webdriver = false;
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5],
+            });
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['en-US', 'en'],
+            });
+            const getParameter = WebGLRenderingContext.prototype.getParameter;
+            WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                if (parameter === 37445) {
+                    return 'NVIDIA Corporation';
+                }
+                if (parameter === 37446) {
+                    return 'NVIDIA GeForce GTX 660/PCIe/SSE2';
+                }
+                return getParameter(parameter);
+            };
+            """)
 
             # Navigate to the page
-            await page.goto(url, wait_until="load")
+            response = await page.goto(url, wait_until="networkidle") # wait_until="load"
+            if response and not response.ok:
+                #await page.screenshot(path='fail.png')
+                print(f"Failed to load the page, status: {response.status}")
+                return None
 
+            # Sleep for 1 second
+            await asyncio.sleep(1)
+            #await page.screenshot(path='test.png')
             # Get the page content
-            html = await page.content()
+            # html = await page.content()
+            # Render Page Content
+            html = await page.evaluate('document.body.innerHTML')
+
             return html
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -128,6 +178,12 @@ def parse_dois(html):
 
     # Check HTML meta tags for DOIs
     pattern = r'<meta name=\".*\" content=\"(?:doi:)?(10\.\d{4,9}/[-._()/:a-zA-Z0-9]+)\"'
+    matches = list(set(re.findall(pattern, html, re.IGNORECASE)))
+    if matches:
+        return matches
+    
+    # Check HTML for DOIs a tag with class doi e.g., a.doi on https://www.sciencedirect.com/science/article/abs/pii/S1095643313002031
+    pattern = r'<a[^>]*class="[^"]*doi[^"]*"[^>]*href="https://doi.org/([^"]+)"'
     matches = list(set(re.findall(pattern, html, re.IGNORECASE)))
     if matches:
         return matches
@@ -164,6 +220,8 @@ def extract_doi_from_url(url):
 
 @lru_cache(maxsize=1000)
 def check_doi_via_redirect(doi, expected_url, expected_html, attempts=1):
+    if not doi:
+        return False
     short_url = f"https://doi.org/{doi}"
     headers = {"User-Agent": "Googlebot/2.1 (+http://www.google.com/bot.html)"}
     time.sleep(30)
@@ -198,6 +256,8 @@ def has_captcha(html):
 
 @lru_cache(maxsize=1000)
 def get_doi_api(doi):
+    if not doi:
+        return None
     api_url = f"https://doi.org/api/handles/{doi}"
     try:
         with urllib.request.urlopen(api_url) as response:
@@ -210,6 +270,8 @@ def get_doi_api(doi):
 
 # Verify the DOI against the URL
 def check_doi_via_api(doi, expected_url):
+    if not doi:
+        return None
     data = get_doi_api(doi)
     try:
         for value in data["values"]: # Example json https://doi.org/api/handles/10.1038/nclimate2195
@@ -221,6 +283,8 @@ def check_doi_via_api(doi, expected_url):
     return False
 
 def get_doi_link(doi):
+    if not doi:
+        return None
     data = get_doi_api(doi)
     for value in data["values"]:
         if value["type"] == "URL":
@@ -231,6 +295,8 @@ def get_doi_link(doi):
 
 @lru_cache(maxsize=1000)
 def get_doi_short_api(doi):
+    if not doi:
+        return None
     # https://shortdoi.org/
     # e.g., https://shortdoi.org/10.1007/s10113-015-0832-z?format=json
     short_doi_url = f"https://shortdoi.org/{doi}?format=json"
@@ -250,10 +316,15 @@ def get_doi_short_api(doi):
 
 
 def get_doi_short(doi):
+    if not doi:
+        return None
     data = get_doi_short_api(doi)
     if data:
         return data["ShortDOI"]
     return None
 
 def get_doi_short_link(doi_short):
+    if not doi_short:
+        return None
     return "https://doi.org/" + doi_short
+
