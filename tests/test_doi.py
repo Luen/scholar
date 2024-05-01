@@ -21,6 +21,12 @@ def test_get_doi():
 #test = get_doi("https://journals.biologists.com/jeb/article-pdf/doi/10.1242/jeb.243973/2170187/jeb243973.pdf")
 #print(test)
 #print(get_doi_short(test))
+#test = get_doi("https://academic.oup.com/conphys/article-pdf/doi/10.1093/conphys/cox003/17644168/cox003.pdf")
+#print(test)
+#print(get_doi_short(test))
+#test = get_doi("https://www.sciencedirect.com/science/article/pii/S1532045608000756")
+
+#print(get_doi("https://www.researchgate.net/profile/Gael-Lecellier/publication/329841906_Distribution_patterns_of_ocellated_eagle_rays_Aetobatus_ocellatus_along_two_sites_in_Moorea_Island_French_Polynesia/links/5ef14ac5299bf1faac6f23ae/Distribution-Patterns-of-Ocellated-Eagle-Rays-Aetobatus-Ocellatus-along-Two-Sites-in-Moorea-Island-French-Polynesia.pdf"))
 
 # https://www.researchgate.net/profile/Gael-Lecellier/publication/329841906_Distribution_patterns_of_ocellated_eagle_rays_Aetobatus_ocellatus_along_two_sites_in_Moorea_Island_French_Polynesia/links/5ef14ac5299bf1faac6f23ae/Distribution-Patterns-of-Ocellated-Eagle-Rays-Aetobatus-Ocellatus-along-Two-Sites-in-Moorea-Island-French-Polynesia.pdf
 # https://sfi-cybium.fr/sites/default/files/pdfs-cybium/19-Berthe%20949%20%5B402%5D181-184.pdf\
@@ -38,3 +44,4 @@ def test_get_doi():
 #print(get_doi_link(doi))
 #print(get_doi_short(doi))
 #print(get_doi_short_link(doi))
+

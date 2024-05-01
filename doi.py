@@ -9,7 +9,7 @@ import asyncio
 from playwright.async_api import async_playwright
 import pdfplumber
 from functools import lru_cache
-
+from logger import print_error, print_warn, print_info
 
 def get_doi(url):
     # Extract DOI URL e.g., https://onlinelibrary.wiley.com/doi/abs/10.1111/gcb.12455 which has the 10.1111/gcb.12455 (https://doi.org/10.1111/gcb.12455)
@@ -19,34 +19,42 @@ def get_doi(url):
     
     # e.g., https://scholar.google.com/scholar?cluster=4186906934658759747&hl=en&oi=scholarr
     if "scholar.google.com" in url:
-        print("Google Scholar URL, so not expecting a DOI. Skipping")
+        # TO DO: Extract paper title from Google Scholar URL then Google the title to get the publication url and then the DOI from the publication page
+        print_error("TO DO!!!! Get DOI from Google Scholar URL")
+        #print_warn("Google Scholar URL, so not expecting a DOI. Skipping...")
         return None
     
     slug = url.split('/')[-1]
     html = get_url_content_using_urllib(url)
     if html is None:
         print(f"Trying to fetch content via browser {url}")
+        time.sleep(10)
         html = asyncio.run(get_url_content_using_browser(url))
     if html is None:
+        print_error(f"Failed to fetch content for {url}")
         return None
-    
+
     # Parse the page for DOIs
     dois = parse_dois(html)
 
     if dois:
-        if len(dois) == 1: # If there is only one DOI, return it
+        if len(dois) == 1: # If there is only one DOI, it is likely to be correct
             return dois[0]
         for doi in dois: # If there are multiple DOIs on the page, check each one
-            print(slug, doi)
+            print("Multiple DOIs:", slug, doi)
             # If part of slug in part of doi, then it is likely the correct one
             if slug in doi: # If the DOI contains the URL slug, it is likely the correct one e.g, https://www.nature.com/articles/nclimate2195 which has nclimate2195 (https://doi.org/10.1038/nclimate2195)
                 return doi
             if check_doi_via_api(doi, url): # URL the DOI api to verify the URL
+               time.sleep(1)
                return doi
             if check_doi_via_redirect(doi, url, html): # Check if the DOI redirects to the URL
+                time.sleep(1)
+                print_warn(f"Verified DOI via redirect: {doi} goes to {url}")
                 return doi
-        return dois[0]
-
+        # Return the first DOI if none of the above conditions are met
+        #return dois[0]
+    
     return None
 
 def get_content_from_pdf(pdf_bytes, url):
@@ -57,21 +65,19 @@ def get_content_from_pdf(pdf_bytes, url):
             page_num = url.split("#page=")[-1] if "#page=" in url else None
             if page_num:
                 if not page_num.isdigit():
-                    print(f"Invalid page number: {page_num}")
-                    return None
+                    print_warn(f"Invalid page number: {page_num}")
                 try:
                     target_page = pdf.pages[int(page_num) - 1]  # Convert page number from 1-based to 0-based index
                     return target_page.extract_text()
                 except IndexError:
-                    print(f"Page {page_num} not found in PDF")
-                    return None
-            else:
-                text = ""
-                for page in pdf.pages:
-                    text += page.extract_text()
-                return text
+                    print_warn(f"Page {page_num} not found in PDF")
+            
+            text = ""
+            for page in pdf.pages:
+                text += page.extract_text() + " "
+            return text.strip()
     except Exception as e:
-        print(f"An error occurred while extracting text from PDF: {e}")
+        print_error(f"An error occurred while extracting text from PDF: {e}")
         return None
 
 @lru_cache(maxsize=1000)
@@ -88,13 +94,13 @@ def get_url_content_using_urllib(url):
             elif 'text/html' in content_type:
                 return content.decode('utf-8')
             else:
-                print(f"Unsupported content type: {content_type}")
+                print_error(f"Unsupported content type: {content_type}")
                 return None
     except HTTPError as err:
-        print(f"Error fetching content from {url}: {err}")
+        print_error(f"Error fetching content from {url}: {err}")
         return None
     except UnicodeDecodeError as e:
-        print(f"Decode error: {e}")
+        print_error(f"Decode error: {e}")
         return None
 
 @lru_cache(maxsize=1000)
@@ -145,15 +151,22 @@ async def get_url_content_using_browser(url):
             """)
 
             # Navigate to the page
-            response = await page.goto(url, wait_until="networkidle") # wait_until="load"
+            try:
+                response = await page.goto(url, wait_until="networkidle", timeout=60000) # wait_until="load" or "domcontentloaded"
+            except Exception as e:
+                #await page.screenshot(path='fail1.png')
+                print_error(f"An error occurred: {e}, retrying in 60 seconds")
+                time.sleep(60)
+                response = await page.goto(url, wait_until="networkidle", timeout=60000) # wait_until="load" or "domcontentloaded"
+
             if response and not response.ok:
-                #await page.screenshot(path='fail.png')
-                print(f"Failed to load the page, status: {response.status}")
+                #await page.screenshot(path='fail2.png')
+                print_error(f"Failed to load the page, status: {response.status}")
                 return None
 
             # Sleep for 1 second
             await asyncio.sleep(1)
-            #await page.screenshot(path='test.png')
+            #await page.screenshot(path='fail3.png')
             # Get the page content
             # html = await page.content()
             # Render Page Content
@@ -161,10 +174,11 @@ async def get_url_content_using_browser(url):
 
             return html
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print_error(f"An error occurred: {e}")
         return None
     finally:
-        await browser.close()
+        if browser:
+            await browser.close()
 
 def parse_dois(html):
     if html is None:
@@ -214,11 +228,23 @@ def extract_doi_from_url(url):
     # doi_pattern = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+(?![.][a-z]+)'
     doi_pattern = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+?(?=/|$|\.pdf)'
     match = re.search(doi_pattern, url, re.IGNORECASE)
-
-    if match:
+    if match and check_doi_via_api(match.group(), url): # Check if DOI is valid e.g., 10.1242/jeb.243973
         return match.group()
-    else:
-        return None
+    
+    # https://academic.oup.com/conphys/article-pdf/doi/10.1093/conphys/cox003/17644168/cox003.pdf
+    # try adding one more slash to get 10.1093/conphys/cox003
+    doi_pattern_extended = r'10\.\d{4,9}/[-._;():A-Z0-9]+/[-._;():A-Z0-9]+'
+    match = re.search(doi_pattern_extended, url, re.IGNORECASE)
+    if match and check_doi_via_api(match.group(), url):
+        return match.group()
+    
+    doi_pattern_full = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+'
+    #doi_pattern_full = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+(?=[.][a-z]+)'
+    match = re.search(doi_pattern_full, url, re.IGNORECASE)
+    if match and check_doi_via_api(match.group(), url):
+        return match.group()
+
+    return None
 
 @lru_cache(maxsize=1000)
 def check_doi_via_redirect(doi, expected_url, expected_html, attempts=1):
@@ -235,7 +261,7 @@ def check_doi_via_redirect(doi, expected_url, expected_html, attempts=1):
         page_html = response.read().decode('utf-8')
         response.close()
         if has_captcha(page_html):
-            print(f"Captcha encountered on {doi} attempt {attempts}")
+            print_warn(f"Captcha encountered on {doi} attempt {attempts}")
             if attempts > 3:
                 print(f"Failed to verify DOI {doi} against {expected_url}. Returning False.")
                 return False
@@ -245,7 +271,11 @@ def check_doi_via_redirect(doi, expected_url, expected_html, attempts=1):
             return check_doi_via_redirect(doi, expected_url, expected_html, attempts+1)
         if normalise_url(follow_url) == normalise_url(expected_url): # Check if the URL redirects to the expected URL
             return True
-        if levenshtein(response.read(), expected_html) < 100: # Check if the HTML content is similar
+        if "Rummer" in page_html:
+            print_warn(f"Verifying DOI: 'Rummer' found in HTML of {doi}. Expected URL: {expected_url}")
+            return True
+        if levenshtein(page_html, expected_html) < 100: # Check if the HTML content is similar
+            print_warn(f"Verifying DOI: Similar HTML content for DOI {doi} {expected_url}")
             return True
     except HTTPError as err:
         print(f"HTTP error {err.code} for DOI {doi}: {err.reason}")
@@ -267,7 +297,7 @@ def get_doi_api(doi):
             time.sleep(1)
             return data
     except HTTPError as err:
-        print(f"HTTP error {err.code} for DOI {doi}: {err.reason}")
+        print_error(f"HTTP error {err.code} for DOI {doi}: {err.reason}")
         return None
 
 # Verify the DOI against the URL
@@ -275,19 +305,31 @@ def check_doi_via_api(doi, expected_url):
     if not doi:
         return None
     data = get_doi_api(doi)
+    if not data:
+        return None
+    link = None
     try:
         for value in data["values"]: # Example json https://doi.org/api/handles/10.1038/nclimate2195
-            if value["type"] == "URL" and normalise_url(value["data"]["value"]) == normalise_url(expected_url):
-                return True
+            if value["type"] == "URL":
+                link = value["data"]["value"]
+                if normalise_url(link) == normalise_url(expected_url):
+                    return True
+                # check end part of doi to see if it's in the new url
+                # e.g., 10.1242/jeb.243973 in https://journals.biologists.com/jeb/article/225/22/jeb243973/283144/Escape-response-kinematics-in-two-species-of
+                if doi.split("/")[-1] in link or doi.split(".")[-1] in link:
+                    print(f"Verifying DOI: End part of DOI {doi} in link {link}")
+                    return True
     except Exception as e:
-        print(f"Failed to verify DOI {doi}: {e}")
-
+        print_error(f"Failed to verify DOI {doi}: {e}")
+    print_error (f"Failed to verify DOI {doi}: {link} against {expected_url}")
     return False
 
 def get_doi_link(doi):
     if not doi:
         return None
     data = get_doi_api(doi)
+    if not data:
+        return None
     for value in data["values"]:
         if value["type"] == "URL":
             link = value["data"]["value"]
@@ -307,13 +349,13 @@ def get_doi_short_api(doi):
             data = json.load(response)
             return data
     except HTTPError as err:
-        print(f"HTTP error {err.code} for short DOI {doi}: {err.reason}")
+        print_error(f"HTTP error {err.code} for short DOI {doi}: {err.reason}")
         return None
     except URLError as e:
-        print(f"URL error {e.reason}")
+        print_error(f"URL error {e.reason}")
         return None
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print_error(f"An error occurred: {e}")
         return None
 
 
@@ -331,3 +373,5 @@ def get_doi_short_link(doi_short):
     return "https://doi.org/" + doi_short
 
 
+
+print(get_doi("https://www.researchgate.net/profile/Gael-Lecellier/publication/329841906_Distribution_patterns_of_ocellated_eagle_rays_Aetobatus_ocellatus_along_two_sites_in_Moorea_Island_French_Polynesia/links/5ef14ac5299bf1faac6f23ae/Distribution-Patterns-of-Ocellated-Eagle-Rays-Aetobatus-Ocellatus-along-Two-Sites-in-Moorea-Island-French-Polynesia.pdf"))

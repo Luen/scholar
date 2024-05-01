@@ -5,18 +5,20 @@ from scholarly import scholarly
 from journal_impact_factor import get_impact_factor
 from doi import get_doi, get_doi_link, get_doi_short, get_doi_short_link
 from standardise import standardise_authors
+from logger import print_error, print_warn, print_info
 
 if not len(sys.argv) == 2:
-    print("Usage: python generate.py scholar_id\nExample: python generate.py ynWS968AAAAJ")
+    print_error("Usage: python generate.py scholar_id\nExample: python generate.py ynWS968AAAAJ")
     sys.exit(1)
 
 scholar_id = sys.argv[1]
 
 try:
     print(f"Getting author with ID: {scholar_id}")
+    print("This script will take a while to complete due to the rate limits of the scraping website and APIs used")
     author = scholarly.search_author_id(scholar_id)
     if not author or author is None:
-        print("Author not found")
+        print_error("Author not found")
         sys.exit(1)  # Exit if no author found
 
     author = scholarly.fill(author)
@@ -29,7 +31,9 @@ try:
 
         filled_pub = scholarly.fill(pub)
         pub_url = filled_pub.get('pub_url', '')
-        journal_name = filled_pub.get('bib', {}).get('journal', '')
+        print(f"Publication URL: {pub_url}")
+        journal_name = filled_pub.get('bib', {}).get('journal', '') if filled_pub.get('bib', {}).get('journal', '') != "Null" else ''
+        print(f"Journal name: {journal_name}")
 
         # Standardise author names
         authors = filled_pub.get('bib', {}).get('author', '')
@@ -40,7 +44,7 @@ try:
             # Get DOI
             print(f"Getting DOI for {pub_url}")
             doi = get_doi(pub_url)
-            print(f"DOI: https://doi.org/{doi}")
+            print_info(f"DOI: {doi}")
             filled_pub['doi'] = doi if doi else ""
 
             doi_link = get_doi_link(doi)
@@ -57,15 +61,15 @@ try:
 
             # Get Impact Factor
             impact_factor = None
-            if journal_name and journal_name != "Null":
+            if journal_name:
                 print(f"Getting impact factor for {journal_name}")
                 impact_factor = get_impact_factor(journal_name.lower())
-                print(f"Impact factor: {impact_factor}")
+                print_info(f"Impact factor: {impact_factor}")
             else:
-                print(f"Journal name not found: {journal_name}")
+                print_warn(f"Journal name not found.}")
             filled_pub['bib']['impact_factor'] = impact_factor
         else: 
-            print(f"Skipping DOI and Impact Factor for symposium, conference, workshop, or annual meeting: {journal_name}")
+            print_warn(f"Skipping DOI and Impact Factor for symposium, conference, workshop, or annual meeting: {journal_name}")
             filled_pub['doi'] = ""
             filled_pub['doi_link'] = ""
             filled_pub['doi_short'] = ""
@@ -83,9 +87,10 @@ try:
     # Write author to file in JSON format
     with open(f"{scholar_id}.json", "w") as f:
         json.dump(author, f, indent=4)
+    print_info(f"DONE. Author data written to {scholar_id}.json")
 
 except AttributeError as e:
-    print(f"AttributeError: {e}")
+    print_error(f"AttributeError: {e}")
 
 except Exception as e:
-    print(f"An error occurred: {e}")
+    print_error(f"An error occurred: {e}")

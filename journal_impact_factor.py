@@ -1,10 +1,12 @@
 from mediawiki import MediaWiki, DisambiguationError
+import time
 from bs4 import BeautifulSoup
 import asyncio
 from playwright.async_api import async_playwright
 import urllib.request
 from urllib.error import HTTPError
 from functools import lru_cache
+from logger import print_error, print_warn, print_info
 
 
 # Create a MediaWiki object to interface with Wikipedia
@@ -12,14 +14,16 @@ wikipedia = MediaWiki()
 
 @lru_cache(maxsize=1000)
 def get_impact_factor(journal_name):
-    if not journal_name or journal_name == "Null":
+    if not journal_name:
         return None
     impact_factor = fetch_if_from_wikipedia(journal_name+" (journal)") # E.g., https://en.wikipedia.org/wiki/Nature_(journal)
     if impact_factor is not None:
         return impact_factor
+    time.sleep(10)
     impact_factor = fetch_if_from_wikipedia(journal_name) # E.g., https://en.wikipedia.org/wiki/Global_Change_Biology
     if impact_factor is not None:
         return impact_factor
+    print_warn(f"TO DO: Could try to go direct to url e.g., 'https://en.wikipedia.org/wiki/Significance_(journal)")
     impact_factor = asyncio.run(fetch_if_from_bioxbio(journal_name))
     if impact_factor is not None:
         return impact_factor
@@ -31,7 +35,7 @@ def fetch_if_from_wikipedia(journal_name):
         search = wikipedia.search(journal_name)
 
         if search is None or len(search) == 0:
-            print(f"No Wikipedia search results not found for {journal_name}")
+            print_warn(f"No Wikipedia search results not found for {journal_name}")
             return None
 
         page = None
@@ -44,7 +48,7 @@ def fetch_if_from_wikipedia(journal_name):
             page = wikipedia.page(search[0])
 
         if page is None:
-            print(f"Journal Wikipedia page not found for {journal_name}")
+            print_warn(f"Journal Wikipedia page not found for {journal_name}")
             return None
         
         soup = BeautifulSoup(page.html, "html.parser") if page.html else None
@@ -56,7 +60,7 @@ def fetch_if_from_wikipedia(journal_name):
                     return impact_factor_data.text.strip().split(' ')[0]
         return None
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print_error(f"An error occurred: {e}")
         return None
 
 def parse_if_from_wikipedia(html_content):
@@ -113,11 +117,12 @@ async def fetch_if_from_bioxbio(journal_name):
 
                 #print(f"Impact Factor: {impact_factor}")
                 return impact_factor
-            else:
-                print("First result link not found.")
-                return None
+            
+            print_warn("First result link not found.")
+        return None
     except Exception as e:
-        print(f"Error fetching from BioxBio: {e}")
+        print_error(f"Error fetching from BioxBio: {e}")
+        return None
     finally:
         await browser.close()
 
