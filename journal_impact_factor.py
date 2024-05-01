@@ -1,10 +1,14 @@
-import wikipedia
+from mediawiki import MediaWiki, DisambiguationError
 from bs4 import BeautifulSoup
 import asyncio
 from playwright.async_api import async_playwright
 import urllib.request
 from urllib.error import HTTPError
 from functools import lru_cache
+
+
+# Create a MediaWiki object to interface with Wikipedia
+wikipedia = MediaWiki()
 
 @lru_cache(maxsize=1000)
 def get_impact_factor(journal_name):
@@ -22,48 +26,46 @@ def get_impact_factor(journal_name):
 @lru_cache(maxsize=1000)
 def fetch_if_from_wikipedia(journal_name):
     try:
-        # Search for the page by journal name
-        page = wikipedia.page(journal_name)
-        
-        # Access the content of the page
-        html_content = page.html()
-        soup = BeautifulSoup(html_content, 'html.parser') # or html.parser or lxml
+        search = wikipedia.search(journal_name)
 
-        # Find the table row ('tr') where the 'th' (table header) contains the text 'Impact factor'
-        impact_factor_row = soup.find('th', string='Impact factor')
-
-        # Check if the row is found
-        if impact_factor_row:
-            # Get the next sibling 'td' which contains the impact factor
-            impact_factor_data = impact_factor_row.find_next_sibling('td')
-            if impact_factor_data:
-                impact_factor_data_array = impact_factor_data.text.strip().split(' ')
-                impact_factor = impact_factor_data_array[0].strip()
-                #year = impact_factor_data_array[1].strip().replace('(', '').replace(')', '')
-                return impact_factor
-            else:
-                print("Impact factor not found.")
-                return None
-        else:
-            print(f"Impact factor row not found for wikipedia page: {journal_name}")
+        if search is None or len(search) == 0:
+            print(f"No Wikipedia search results not found for {journal_name}")
             return None
-    except wikipedia.exceptions.PageError:
-        print(f"Wikipedia page not found. {journal_name}")
-        return None
-    except wikipedia.exceptions.DisambiguationError as e:
-        # Attempt to find a relevant page from disambiguation options
-        for option in e.options:
-            if "journal" in option.lower():
-                try:
-                    return fetch_if_from_wikipedia(option)  # Attempt to fetch from the first matching option
-                except wikipedia.exceptions.DisambiguationError:
-                    continue  # Continue if nested disambiguation error occurs
-            
-        print(f"Wikipedia page not found - Disambiguation error for '{journal_name}': {e.options}")
+
+        page = None
+        if "(journal)" in journal_name:
+            for option in search:
+                if "(journal)" in option:
+                    page = wikipedia.page(option)
+                    break
+        else:
+            page = wikipedia.page(search[0])
+
+        if page is None:
+            print(f"Journal Wikipedia page not found for {journal_name}")
+            return None
+        
+        soup = BeautifulSoup(page.html, "html.parser") if page.html else None
+        if soup:
+            impact_factor_row = soup.find('th', string='Impact factor')
+            if impact_factor_row:
+                impact_factor_data = impact_factor_row.find_next_sibling('td')
+                if impact_factor_data:
+                    return impact_factor_data.text.strip().split(' ')[0]
         return None
     except Exception as e:
         print(f"An error occurred: {e}")
         return None
+
+def parse_if_from_wikipedia(html_content):
+    soup = BeautifulSoup(html_content, "html.parser")
+    impact_factor_row = soup.find('th', string='Impact factor')
+    if impact_factor_row:
+        impact_factor_data = impact_factor_row.find_next_sibling('td')
+        if impact_factor_data:
+            return impact_factor_data.text.strip().split(' ')[0]
+    return None
+
 
 # Fetch impact factor from somewhere else
 async def fetch_if_from_bioxbio(journal_name):
@@ -135,3 +137,4 @@ def fetch_if_from_journalguide(journal_name):
 #def fetch_if_from_pubmed(journal_name):
 
 #def fetch_if_from_crossref(journal_name):
+

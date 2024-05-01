@@ -2,6 +2,8 @@
 
 This project uses a home server cronjob to scrape [Google Scholar](https://scholar.google.com.au/) data via the [scholarly](https://github.com/scholarly-python-package/scholarly) Python package and the [wikipedia](https://github.com/goldsmith/Wikipedia) Python package to get the journal's impact factor (IF). The script that uploads the data to a publicly accessible server via Secure Copy (SCP) or rsync that serves the json data via a Flask application.
 
+See also pymediawiki and Wikipedia-API packages
+
 # Installation
 
 ## Prerequisites

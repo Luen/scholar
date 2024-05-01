@@ -3,7 +3,7 @@ import time
 import json
 from scholarly import scholarly
 from journal_impact_factor import get_impact_factor
-from doi import get_doi
+from doi import get_doi, get_doi_link, get_doi_short, get_doi_short_link
 from standardise import standardise_authors
 
 if not len(sys.argv) == 2:
@@ -34,7 +34,7 @@ try:
         # Standardise author names
         authors = filled_pub.get('bib', {}).get('author', '')
         standardised_authors = standardise_authors(authors)
-        filled_pub['authors_standardised'] = standardised_authors
+        filled_pub['bib']['authors_standardised'] = standardised_authors
 
         if not "symposium" in journal_name or not "conference" in journal_name or not "workshop" in journal_name or not "annual meeting" in journal_name:
             # Get DOI
@@ -42,6 +42,18 @@ try:
             doi = get_doi(pub_url)
             print(f"DOI: https://doi.org/{doi}")
             filled_pub['doi'] = doi if doi else ""
+
+            doi_link = get_doi_link(doi)
+            print(f"DOI link: {doi_link}")
+            filled_pub['doi_link'] = doi_link
+
+            doi_short = get_doi_short(doi)
+            print(f"Short DOI: {doi_short}")
+            filled_pub['doi_short'] = doi_short
+
+            doi_short_link = get_doi_short_link(doi_short)
+            print(f"Short DOI link: {doi_short_link}")
+            filled_pub['doi_short_link'] = doi_short_link
 
             # Get Impact Factor
             impact_factor = None
@@ -51,14 +63,18 @@ try:
                 print(f"Impact factor: {impact_factor}")
             else:
                 print(f"Journal name not found: {journal_name}")
-            filled_pub['impact_factor'] = impact_factor
+            filled_pub['bib']['impact_factor'] = impact_factor
         else: 
             print(f"Skipping DOI and Impact Factor for symposium, conference, workshop, or annual meeting: {journal_name}")
             filled_pub['doi'] = ""
-            filled_pub['impact_factor'] = ""
+            filled_pub['doi_link'] = ""
+            filled_pub['doi_short'] = ""
+            filled_pub['doi_short_link'] = ""
+            filled_pub['bib']['impact_factor'] = ""
 
         # Add to list of processed publications
         filled_publications.append(filled_pub)
+        print("Sleeping for 10 seconds...")
         time.sleep(10)  # Be polite with the rate of requests
 
     # Update the author data with processed publications

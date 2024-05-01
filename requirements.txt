@@ -1,5 +1,5 @@
 scholarly>=1.7.11
-wikipedia>=1.4.0
+pymediawiki>=0.7.4
 lxml>=5.2.1
 beautifulsoup4>=4.12.3
 lru_cache>=0.2.3
