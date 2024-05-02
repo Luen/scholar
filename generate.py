@@ -44,7 +44,10 @@ try:
             # Get DOI
             print(f"Getting DOI for {pub_url}")
             doi = get_doi(pub_url)
-            print_info(f"DOI: {doi}")
+            if not doi:
+                print_warn("DOI not found. Trying to get DOI from the publication title.")
+            else:
+                print_info(f"DOI: {doi}")
             filled_pub['doi'] = doi if doi else ""
 
             doi_link = get_doi_link(doi)
@@ -66,7 +69,7 @@ try:
                 impact_factor = get_impact_factor(journal_name.lower())
                 print_info(f"Impact factor: {impact_factor}")
             else:
-                print_warn(f"Journal name not found.}")
+                print_warn(f"Journal name not found.")
             filled_pub['bib']['impact_factor'] = impact_factor
         else: 
             print_warn(f"Skipping DOI and Impact Factor for symposium, conference, workshop, or annual meeting: {journal_name}")
