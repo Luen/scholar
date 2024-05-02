@@ -28,6 +28,7 @@ def test_get_doi():
 
 #print(get_doi("https://www.researchgate.net/profile/Gael-Lecellier/publication/329841906_Distribution_patterns_of_ocellated_eagle_rays_Aetobatus_ocellatus_along_two_sites_in_Moorea_Island_French_Polynesia/links/5ef14ac5299bf1faac6f23ae/Distribution-Patterns-of-Ocellated-Eagle-Rays-Aetobatus-Ocellatus-along-Two-Sites-in-Moorea-Island-French-Polynesia.pdf"))
 
+#print(get_doi("https://www.researchgate.net/profile/Gael-Lecellier/publication/329841906_Distribution_patterns_of_ocellated_eagle_rays_Aetobatus_ocellatus_along_two_sites_in_Moorea_Island_French_Polynesia/links/5ef14ac5299bf1faac6f23ae/Distribution-Patterns-of-Ocellated-Eagle-Rays-Aetobatus-Ocellatus-along-Two-Sites-in-Moorea-Island-French-Polynesia.pdf"))
 # https://www.researchgate.net/profile/Gael-Lecellier/publication/329841906_Distribution_patterns_of_ocellated_eagle_rays_Aetobatus_ocellatus_along_two_sites_in_Moorea_Island_French_Polynesia/links/5ef14ac5299bf1faac6f23ae/Distribution-Patterns-of-Ocellated-Eagle-Rays-Aetobatus-Ocellatus-along-Two-Sites-in-Moorea-Island-French-Polynesia.pdf
 # https://sfi-cybium.fr/sites/default/files/pdfs-cybium/19-Berthe%20949%20%5B402%5D181-184.pdf\
 # https://scholar.google.com/scholar?cluster=4186906934658759747&hl=en&oi=scholarr

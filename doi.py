@@ -117,15 +117,16 @@ async def get_url_content_using_browser(url):
                     '--disable-setuid-sandbox',
                     '--disable-infobars',
                     '--disable-blink-features=AutomationControlled',
+                    '--disable-extension',
                     '--window-position=0,0',
                     '--ignore-certificate-errors',
                     '--ignore-certificate-errors-spki-list'
                 ]
             )
-            # Create a new context with a custom user agent
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                viewport={'width': 1280, 'height': 1280}
+                viewport={'width': 1280, 'height': 1280},
+                #accept_downloads=True, # Enables download in the context (for PDFs)
             )
             page = await context.new_page()
 
@@ -163,9 +164,15 @@ async def get_url_content_using_browser(url):
                 #await page.screenshot(path='fail2.png')
                 print_error(f"Failed to load the page, status: {response.status}")
                 return None
-
+        
             # Sleep for 1 second
             await asyncio.sleep(1)
+            
+            # if pdf, extract and return text
+            #if response.headers.get("Content-Type") == "application/pdf" or ".pdf" in url:
+            if ".pdf" in url:
+                #print(f"Browser: Extracting text from PDF {url}")
+                print_error(f"TODO: Work out how to download PDF in Playwright")
             #await page.screenshot(path='fail3.png')
             # Get the page content
             # html = await page.content()
@@ -371,7 +378,3 @@ def get_doi_short_link(doi_short):
     if not doi_short:
         return None
     return "https://doi.org/" + doi_short
-
-
-
-print(get_doi("https://www.researchgate.net/profile/Gael-Lecellier/publication/329841906_Distribution_patterns_of_ocellated_eagle_rays_Aetobatus_ocellatus_along_two_sites_in_Moorea_Island_French_Polynesia/links/5ef14ac5299bf1faac6f23ae/Distribution-Patterns-of-Ocellated-Eagle-Rays-Aetobatus-Ocellatus-along-Two-Sites-in-Moorea-Island-French-Polynesia.pdf"))

@@ -31,7 +31,6 @@ try:
 
         filled_pub = scholarly.fill(pub)
         pub_url = filled_pub.get('pub_url', '')
-        print(f"Publication URL: {pub_url}")
         journal_name = filled_pub.get('bib', {}).get('journal', '') if filled_pub.get('bib', {}).get('journal', '') != "Null" else ''
         print(f"Journal name: {journal_name}")
 
@@ -48,19 +47,16 @@ try:
                 print_warn("DOI not found. Trying to get DOI from the publication title.")
             else:
                 print_info(f"DOI: {doi}")
+                doi_link = get_doi_link(doi)
+                print(f"DOI link: {doi_link}")
+                doi_short = get_doi_short(doi)
+                print(f"Short DOI: {doi_short}")
+                doi_short_link = get_doi_short_link(doi_short)
+
             filled_pub['doi'] = doi if doi else ""
-
-            doi_link = get_doi_link(doi)
-            print(f"DOI link: {doi_link}")
-            filled_pub['doi_link'] = doi_link
-
-            doi_short = get_doi_short(doi)
-            print(f"Short DOI: {doi_short}")
-            filled_pub['doi_short'] = doi_short
-
-            doi_short_link = get_doi_short_link(doi_short)
-            print(f"Short DOI link: {doi_short_link}")
-            filled_pub['doi_short_link'] = doi_short_link
+            filled_pub['doi_short_link'] = doi_short_link if doi_short_link else ""
+            filled_pub['doi_short'] = doi_short if doi_short else ""
+            filled_pub['doi_link'] = doi_link if doi_link else ""
 
             # Get Impact Factor
             impact_factor = None
