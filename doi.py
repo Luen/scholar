@@ -2,6 +2,7 @@ import time
 import json
 import re
 import io
+import os
 import urllib.request
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -28,6 +29,7 @@ def get_doi(url):
         return None
     
     slug = url.split('/')[-1]
+    html = None
     html = get_url_content_using_urllib(url)
     if html is None:
         print(f"Trying to fetch content via browser {url}")
@@ -129,7 +131,7 @@ async def get_url_content_using_browser(url):
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 viewport={'width': 1280, 'height': 1280},
-                #accept_downloads=True, # Enables download in the context (for PDFs)
+                accept_downloads=True, # Enables download in the context (for PDFs)
             )
             page = await context.new_page()
 
@@ -154,6 +156,52 @@ async def get_url_content_using_browser(url):
             };
             """)
 
+
+            # If link is a pdf, extract pdf text
+            if ".pdf" in url:
+                print(f"Browser: Extracting text from PDF {url}")
+                #print_error(f"TODO: Work out how to download PDF in Playwright")
+                temp_file_name = "temp.html"
+                temp_html = f"""<html><body><a href="{url}">{url}</a></body></html>"""
+                
+                file = os.path.realpath(__file__)
+                temp_dir = os.path.join(os.path.dirname(file), "temp")
+                
+                if not os.path.exists(temp_dir):
+                    os.makedirs(temp_dir)
+                
+                temp_html_path = os.path.join(temp_dir, temp_file_name)
+                
+                # Write the HTML to a temporary file
+                with open(temp_html_path, 'w', encoding='utf8') as f:
+                    f.write(temp_html)
+                
+                await page.goto("file://" + temp_html_path)
+                link = await page.query_selector('//a')
+                url = await link.get_attribute('href')
+                
+                # Download the PDF
+                async with page.expect_download() as download_info:
+                    await link.click(modifiers=["Alt"])
+                
+                download = await download_info.value
+
+                temp_pdf_path = os.path.join(temp_dir, download.suggested_filename)
+                await download.save_as(temp_pdf_path)               
+
+                # Read the PDF
+                with open(temp_pdf_path, "rb") as pdf_file:
+                    pdf_bytes = pdf_file.read()
+                
+                # Clean up
+                os.remove(temp_html_path)
+                os.remove(temp_pdf_path)
+                # If directory is empty, remove it
+                if not os.listdir(temp_dir):
+                    os.rmdir(temp_dir)
+
+                return get_content_from_pdf(pdf_bytes, url)
+
             # Navigate to the page
             try:
                 response = await page.goto(url, wait_until="networkidle", timeout=60000) # wait_until="load" or "domcontentloaded"
@@ -170,12 +218,7 @@ async def get_url_content_using_browser(url):
         
             # Sleep for 1 second
             await asyncio.sleep(1)
-            
-            # if pdf, extract and return text
-            #if response.headers.get("Content-Type") == "application/pdf" or ".pdf" in url:
-            if ".pdf" in url:
-                #print(f"Browser: Extracting text from PDF {url}")
-                print_error(f"TODO: Work out how to download PDF in Playwright")
+
             #await page.screenshot(path='fail3.png')
             # Get the page content
             # html = await page.content()
@@ -381,4 +424,3 @@ def get_doi_short_link(doi_short):
     if not doi_short:
         return None
     return "https://doi.org/" + doi_short
-
