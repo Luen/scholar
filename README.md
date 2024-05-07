@@ -15,18 +15,21 @@ The JSON can then be used, for example, by uploading the data to a publicly acce
 ## Setup
 1. Clone this repository to your local machine.
 2. Install the required packages.
-3. Setup cronjob on home computer.
+3. Setup.
 
 ```
 git clone https://github.com/Luen/scholarly-api
-python -m venv scholarly-api
-source scholarly-api/bin/activate
+python -m venv scholar
+source scholar/bin/activate
 pip install -r requirements.txt
-0 * * * * /path/to/your_bash_script.sh
 ```
 4. Test run.
 ```
 python main.py ynWS968AAAAJ
+```
+5. Set up cronjob.
+```
+0 * * * * /path/to/your_bash_script.sh
 ```
 
 # Testing
