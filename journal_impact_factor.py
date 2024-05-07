@@ -34,12 +34,12 @@ def fetch_if_from_wikipedia(journal_name):
         # Try to get the Wikipedia page for the journal
         page = wikipedia.page(journal_name.replace(' ', '_').title()+"_(journal)") # E.g., https://en.wikipedia.org/wiki/Significance_(journal)
         if page:
-            impact_factor = parse_if_from_wikipedia(page.html())
+            impact_factor = parse_if_from_wikipedia(page.html) # Note the lack of () which is intentional as pymediawiki handles the .page differently
             if impact_factor is False:
                 return None
             if impact_factor is not None:
                 return impact_factor 
-
+        
         time.sleep(10)
         page = None
         # Try searching for the journal name
@@ -75,6 +75,7 @@ def fetch_if_from_wikipedia(journal_name):
         print_error(f"An error occurred: {e}")
         return None
 
+
 def parse_if_from_wikipedia(html_content):
     if not html_content:
         return None
@@ -85,10 +86,10 @@ def parse_if_from_wikipedia(html_content):
         if impact_factor_data:
             impact_factor_data_array = impact_factor_data.text.strip().split(' ')
             impact_factor = impact_factor_data_array[0].strip()
-            year = impact_factor_data_array[1].strip().replace('(', '').replace(')', '')
+            impact_factor_year = impact_factor_data_array[1].strip().replace('(', '').replace(')', '')
             current_year = int(time.strftime("%Y"))
-            if year and int(year) <= (current_year - 2):
-                print_warn(f"Year is {year}. Impact Factor outdated.")
+            if impact_factor_year and int(impact_factor_year) < (current_year - 2):
+                print_warn(f"Year is {impact_factor_year}. Impact Factor outdated. {int(current_year - 2)} == {int(impact_factor_year)}")
                 return False
             return impact_factor
     return None
@@ -147,15 +148,15 @@ async def fetch_if_from_bioxbio(journal_name):
                     return None
 
                 # Extracting year and impact factor
-                year = impact_factor_array[0].split(' ')[0] if impact_factor_array else None
+                impact_factor_year = impact_factor_array[0].split(' ')[0] if impact_factor_array else None
                 impact_factor = impact_factor_array[1] if impact_factor_array else None
                 if not impact_factor:
                     print_warn("Impact Factor not found.")
                     return None
                 
                 current_year = int(time.strftime("%Y"))
-                if year and int(year) <= (current_year - 2):
-                    print_warn(f"Year is {year}. Impact Factor outdated.")
+                if impact_factor_year and int(impact_factor_year) < (current_year - 2):
+                    print_warn(f"Year is {impact_factor_year}. Impact Factor outdated.")
                     return None
 
                 #print(f"Impact Factor: {impact_factor}")

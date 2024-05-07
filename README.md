@@ -22,6 +22,7 @@ git clone https://github.com/Luen/scholarly-api
 python -m venv scholar
 source scholar/bin/activate
 pip install -r requirements.txt
+playwright install
 ```
 4. Test run.
 ```
