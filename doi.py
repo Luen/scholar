@@ -10,10 +10,11 @@ from standardise import levenshtein
 import asyncio
 from playwright.async_api import async_playwright
 import pdfplumber
+from googlesearch import search
 from functools import lru_cache
 from logger import print_error, print_warn, print_info
 
-def get_doi(url):
+def get_doi(url, pub_title=None):
     # Extract DOI URL e.g., https://onlinelibrary.wiley.com/doi/abs/10.1111/gcb.12455 which has the 10.1111/gcb.12455 (https://doi.org/10.1111/gcb.12455)
     doi_in_url = extract_doi_from_url(url)
     if doi_in_url:
@@ -23,10 +24,15 @@ def get_doi(url):
     #host = urlparse(url).hostname
     #if host and host.endswith("scholar.google.com"):
     if "scholar.google.com" in url:
-        # TO DO: Extract paper title from Google Scholar URL then Google the title to get the publication url and then the DOI from the publication page
-        print_error("TO DO!!!! Get DOI from Google Scholar URL")
-        #print_warn("Google Scholar URL, so not expecting a DOI. Skipping...")
-        return None
+        # Google Search the publication's title to find what is likely the publication's url and then the DOI from that page
+        print("Publication URL is a Google Scholar URL.")
+        results = search(pub_title)
+        doi = None
+        for result in results:
+            print_warn(f"Getting DOI from Google Search result {result}")
+            doi = get_doi(result, pub_title)
+            if doi:
+                return doi
     
     slug = url.split('/')[-1]
     html = None
@@ -424,3 +430,6 @@ def get_doi_short_link(doi_short):
     if not doi_short:
         return None
     return "https://doi.org/" + doi_short
+
+
+print(get_doi("https://scholar.google.com/scholar?cluster=4186906934658759747&hl=en&oi=scholarr", "Improving \u201cshark park\u201d protections under threat from climate change using the conservation physiology toolbox"))

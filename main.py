@@ -32,6 +32,7 @@ try:
         print(f"Processing publication {index+1}/{len(author['publications'])}: {pub['bib']['title']}")
 
         filled_pub = scholarly.fill(pub)
+        pub_title = filled_pub.get('bib', {}).get('title', '')
         pub_url = filled_pub.get('pub_url', '')
         journal_name = filled_pub.get('bib', {}).get('journal', '') if filled_pub.get('bib', {}).get('journal', '') != "Null" else ''
         print(f"Journal name: {journal_name}")
@@ -44,7 +45,7 @@ try:
         if not "symposium" in journal_name or not "conference" in journal_name or not "workshop" in journal_name or not "annual meeting" in journal_name:
             # Get DOI
             print(f"Getting DOI for {pub_url}")
-            doi = get_doi(pub_url)
+            doi = get_doi(pub_url, pub_title)
             if not doi:
                 print_warn("DOI not found. Trying to get DOI from the publication title.")
             else:
