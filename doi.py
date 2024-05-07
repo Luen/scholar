@@ -14,25 +14,11 @@ from googlesearch import search
 from functools import lru_cache
 from logger import print_error, print_warn, print_info
 
-def get_doi(url, pub_title=None):
+def get_doi(url):
     # Extract DOI URL e.g., https://onlinelibrary.wiley.com/doi/abs/10.1111/gcb.12455 which has the 10.1111/gcb.12455 (https://doi.org/10.1111/gcb.12455)
     doi_in_url = extract_doi_from_url(url)
     if doi_in_url:
         return doi_in_url
-    
-    # e.g., https://scholar.google.com/scholar?cluster=4186906934658759747&hl=en&oi=scholarr
-    #host = urlparse(url).hostname
-    #if host and host.endswith("scholar.google.com"):
-    if "scholar.google.com" in url:
-        # Google Search the publication's title to find what is likely the publication's url and then the DOI from that page
-        print("Publication URL is a Google Scholar URL.")
-        results = search(pub_title)
-        doi = None
-        for result in results:
-            print_warn(f"Getting DOI from Google Search result {result}")
-            doi = get_doi(result, pub_title)
-            if doi:
-                return doi
     
     slug = url.split('/')[-1]
     html = None
@@ -66,6 +52,19 @@ def get_doi(url, pub_title=None):
         # Return the first DOI if none of the above conditions are met
         #return dois[0]
     
+    return None
+
+
+def get_doi_from_title(pub_title):
+    # Google Search the publication's title to find what is likely the publication's url and then the DOI from that page
+    print(f"Publication URL is a Google Scholar URL. Publication Title: {pub_title}")
+    results = search(pub_title)
+    doi = None
+    for result in results:
+        print_warn(f"Getting DOI from Google Search result {result}")
+        doi = get_doi(result, pub_title)
+        if doi:
+            return doi
     return None
 
 def get_content_from_pdf(pdf_bytes, url):
@@ -359,8 +358,7 @@ def get_doi_api(doi):
         print_error(f"HTTP error {err.code} for DOI {doi}: {err.reason}")
         return None
 
-# Verify the DOI against the URL
-def check_doi_via_api(doi, expected_url):
+def get_doi_resolved_link(doi):
     if not doi:
         return None
     data = get_doi_api(doi)
@@ -368,30 +366,34 @@ def check_doi_via_api(doi, expected_url):
         return None
     link = None
     try:
-        for value in data["values"]: # Example json https://doi.org/api/handles/10.1038/nclimate2195
+        for value in data["values"]:
             if value["type"] == "URL":
                 link = value["data"]["value"]
-                if normalise_url(link) == normalise_url(expected_url):
-                    return True
-                # check end part of doi to see if it's in the new url
-                # e.g., 10.1242/jeb.243973 in https://journals.biologists.com/jeb/article/225/22/jeb243973/283144/Escape-response-kinematics-in-two-species-of
-                if doi.split("/")[-1] in link or doi.split(".")[-1] in link:
-                    print(f"Verifying DOI: End part of DOI {doi} in link {link}")
-                    return True
     except Exception as e:
-        print_error(f"Failed to verify DOI {doi}: {e}")
+        print_error(f"Failed to get resolved link for DOI {doi}: {e}")
+    return link
+
+# Verify the DOI against the URL
+def check_doi_via_api(doi, expected_url):
+    if not doi or not expected_url:
+        return None
+    link = get_doi_resolved_link(doi)
+    if not link:
+        return None
+    if normalise_url(link) == normalise_url(expected_url):
+        return True
+    # check end part of doi to see if it's in the new url
+    # e.g., 10.1242/jeb.243973 in https://journals.biologists.com/jeb/article/225/22/jeb243973/283144/Escape-response-kinematics-in-two-species-of
+    if doi.split("/")[-1] in link or doi.split(".")[-1] in link:
+        print(f"Verifying DOI: End part of DOI {doi} in link {link}")
+        return True
     print_error (f"Failed to verify DOI {doi}: {link} against {expected_url}")
     return False
 
 def get_doi_link(doi):
     if not doi:
         return None
-    data = get_doi_api(doi)
-    if not data:
-        return None
-    for value in data["values"]:
-        if value["type"] == "URL":
-            link = value["data"]["value"]
+    link = get_doi_resolved_link(doi)
     if link:
         return "https://doi.org/" + doi
     return None
@@ -431,5 +433,3 @@ def get_doi_short_link(doi_short):
         return None
     return "https://doi.org/" + doi_short
 
-
-print(get_doi("https://scholar.google.com/scholar?cluster=4186906934658759747&hl=en&oi=scholarr", "Improving \u201cshark park\u201d protections under threat from climate change using the conservation physiology toolbox"))

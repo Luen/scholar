@@ -5,7 +5,7 @@ import time
 import json
 from scholarly import scholarly
 from journal_impact_factor import get_impact_factor
-from doi import get_doi, get_doi_link, get_doi_short, get_doi_short_link
+from doi import get_doi, get_doi_from_title, get_doi_link, get_doi_resolved_link, get_doi_short, get_doi_short_link, normalise_url
 from standardise import standardise_authors
 from logger import print_error, print_warn, print_info
 
@@ -45,21 +45,34 @@ try:
         if not "symposium" in journal_name or not "conference" in journal_name or not "workshop" in journal_name or not "annual meeting" in journal_name:
             # Get DOI
             print(f"Getting DOI for {pub_url}")
-            doi = get_doi(pub_url, pub_title)
+
+            # e.g., https://scholar.google.com/scholar?cluster=4186906934658759747&hl=en&oi=scholarr
+            #host = urlparse(url).hostname
+            #if host and host.endswith("scholar.google.com"):
+            if "scholar.google.com" in url:
+                doi = get_doi_from_title(pub_title)
+            else: 
+                doi = get_doi(pub_url)
             if not doi:
                 print_warn("DOI not found. Trying to get DOI from the publication title.")
             else:
                 print_info(f"DOI: {doi}")
                 doi_link = get_doi_link(doi)
                 print(f"DOI link: {doi_link}")
+                resolved_link = get_doi_resolved_link(doi)
+                print(f"DOI Resolves to: {doi_link}")
+                if normalise_url(pub_url) != normalise_url(resolved_link):
+                    print(f"Resolved link does not match publication URL:\n{pub_url}\n{resolved_link}")
                 doi_short = get_doi_short(doi)
                 print(f"Short DOI: {doi_short}")
                 doi_short_link = get_doi_short_link(doi_short)
 
+            # Add DOI and Impact Factor to publication
             filled_pub['doi'] = doi if doi else ""
             filled_pub['doi_short_link'] = doi_short_link if doi_short_link else ""
             filled_pub['doi_short'] = doi_short if doi_short else ""
             filled_pub['doi_link'] = doi_link if doi_link else ""
+            filled_pub['doi_resolved_link'] = resolved_link if resolved_link else ""
 
             # Get Impact Factor
             impact_factor = None
