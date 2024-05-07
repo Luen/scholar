@@ -165,7 +165,7 @@ async def get_url_content_using_browser(url):
             # If link is a pdf, extract pdf text
             if ".pdf" in url:
                 print(f"Browser: Extracting text from PDF {url}")
-                #print_error(f"TODO: Work out how to download PDF in Playwright")
+                # https://github.com/microsoft/playwright/issues/12777
                 temp_file_name = "temp.html"
                 temp_html = f"""<html><body><a href="{url}">{url}</a></body></html>"""
                 
