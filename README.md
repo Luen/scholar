@@ -1,8 +1,8 @@
 # Scholar API
 
-This project uses a home server cronjob to scrape [Google Scholar](https://scholar.google.com.au/) data via the [scholarly](https://github.com/scholarly-python-package/scholarly) Python package and the [wikipedia](https://github.com/goldsmith/Wikipedia) Python package to get the journal's impact factor (IF). The script that uploads the data to a publicly accessible server via Secure Copy (SCP) or rsync that serves the json data via a Flask application.
+This project uses a home server cronjob to scrape [Google Scholar](https://scholar.google.com.au/) data via the [scholarly](https://github.com/scholarly-python-package/scholarly) Python package and the [wikipedia](https://github.com/goldsmith/Wikipedia) Python package to get the journal's impact factor (IF) and the publication's DOI. 
 
-See also pymediawiki and Wikipedia-API packages
+The JSON can then be used, for example, by uploading the data to a publicly accessible server via Secure Copy (SCP) or rsync, which serves the JSON data via a Flask application.
 
 # Installation
 
@@ -26,9 +26,9 @@ pip install -r requirements.txt
 ```
 
 # Testing
-install pytest and run by using comman pytest. 
+Install pytest and run it using the command `pytest`. 
 
-# Starting teh flask app
+# Starting the flask app
 Navigate to the project directory and run the Flask application:
 `python ./serve.py`
 
@@ -50,4 +50,4 @@ Example: [/ynWS968AAAAJ](http://127.0.0.1:5000/ynWS968AAAAJ)
 This open-sourced project is released under the [Unlicense](http://unlicense.org/).
 
 # Notes 
-Alternative wikipedia package: [wikipedia-api](https://github.com/martin-majlis/Wikipedia-API)
+Alternative wikipedia packages: [wikipedia-api](https://github.com/martin-majlis/Wikipedia-API) and [pymediawiki](https://pypi.org/project/pymediawiki/)
