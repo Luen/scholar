@@ -5,7 +5,7 @@ import time
 import json
 from scholarly import scholarly
 from journal_impact_factor import get_impact_factor
-from doi import get_doi, get_doi_from_title, get_doi_link, get_doi_resolved_link, get_doi_short, get_doi_short_link, normalise_url
+from doi import get_doi, get_doi_from_title, get_doi_link, get_doi_resolved_link, get_doi_short, get_doi_short_link, are_urls_equal
 from standardise import standardise_authors
 from logger import print_error, print_warn, print_info
 
@@ -49,7 +49,7 @@ try:
             # e.g., https://scholar.google.com/scholar?cluster=4186906934658759747&hl=en&oi=scholarr
             #host = urlparse(url).hostname
             #if host and host.endswith("scholar.google.com"):
-            if "scholar.google.com" in url:
+            if "scholar.google.com" in pub_url and pub_title:
                 doi = get_doi_from_title(pub_title)
             else: 
                 doi = get_doi(pub_url)
@@ -60,9 +60,9 @@ try:
                 doi_link = get_doi_link(doi)
                 print(f"DOI link: {doi_link}")
                 resolved_link = get_doi_resolved_link(doi)
-                print(f"DOI Resolves to: {doi_link}")
-                if normalise_url(pub_url) != normalise_url(resolved_link):
-                    print(f"Resolved link does not match publication URL:\n{pub_url}\n{resolved_link}")
+                print(f"DOI Resolves to: {resolved_link}")
+                if not are_urls_equal(pub_url, resolved_link):
+                    print_warn(f"Resolved link does not match publication URL:\n{pub_url}\n{resolved_link}")
                 doi_short = get_doi_short(doi)
                 print(f"Short DOI: {doi_short}")
                 doi_short_link = get_doi_short_link(doi_short)

@@ -12,18 +12,17 @@ from logger import print_error, print_warn, print_info
 # Create a MediaWiki object to interface with Wikipedia
 wikipedia = MediaWiki()
 
+
 @lru_cache(maxsize=1000)
 def get_impact_factor(journal_name):
     if not journal_name:
         return None
-    impact_factor = fetch_if_from_wikipedia(journal_name+" (journal)") # E.g., https://en.wikipedia.org/wiki/Nature_(journal)
+    impact_factor = fetch_if_from_wikipedia(journal_name) 
     if impact_factor is not None:
         return impact_factor
-    time.sleep(10)
-    impact_factor = fetch_if_from_wikipedia(journal_name) # E.g., https://en.wikipedia.org/wiki/Global_Change_Biology
+    impact_factor = fetch_if_from_wikipedia(journal_name) 
     if impact_factor is not None:
         return impact_factor
-    print_warn(f"TO DO: Could try to go direct to url e.g., 'https://en.wikipedia.org/wiki/Significance_(journal)")
     impact_factor = asyncio.run(fetch_if_from_bioxbio(journal_name))
     if impact_factor is not None:
         return impact_factor
@@ -32,44 +31,66 @@ def get_impact_factor(journal_name):
 @lru_cache(maxsize=1000)
 def fetch_if_from_wikipedia(journal_name):
     try:
-        search = wikipedia.search(journal_name)
+        # Try to get the Wikipedia page for the journal
+        page = wikipedia.page(journal_name.replace(' ', '_').title()+"_(journal)") # E.g., https://en.wikipedia.org/wiki/Significance_(journal)
+        if page:
+            impact_factor = parse_if_from_wikipedia(page.html())
+            if impact_factor is False:
+                return None
+            if impact_factor is not None:
+                return impact_factor 
 
-        if search is None or len(search) == 0:
-            print_warn(f"No Wikipedia search results not found for {journal_name}")
-            return None
-
+        time.sleep(10)
         page = None
-        if "(journal)" in journal_name:
-            for option in search:
-                if "(journal)" in option:
-                    page = wikipedia.page(option)
-                    break
-        else:
-            page = wikipedia.page(search[0])
-
-        if page is None:
-            print_warn(f"Journal Wikipedia page not found for {journal_name}")
-            return None
+        # Try searching for the journal name
+        search = wikipedia.search(journal_name+" (journal)") # E.g., https://en.wikipedia.org/wiki/Nature_(journal)
+        if search is not None or len(search) != 0:
+            option = search[0]
+            if "(journal)" in option:
+                time.sleep(10)
+                page = wikipedia.page(option)
+            if page:
+                impact_factor = parse_if_from_wikipedia(page.html())
+                if impact_factor is False:
+                    return None
+                if impact_factor is not None:
+                    return impact_factor
         
-        soup = BeautifulSoup(page.html, "html.parser") if page.html else None
-        if soup:
-            impact_factor_row = soup.find('th', string='Impact factor')
-            if impact_factor_row:
-                impact_factor_data = impact_factor_row.find_next_sibling('td')
-                if impact_factor_data:
-                    return impact_factor_data.text.strip().split(' ')[0]
+        page = None
+        time.sleep(10)
+        search = wikipedia.search(journal_name) # E.g., https://en.wikipedia.org/wiki/Global_Change_Biology
+        if search is not None or len(search) != 0:
+            time.sleep(10)
+            page = wikipedia.page(search[0])
+            if page:
+                impact_factor = parse_if_from_wikipedia(page.html())
+                if impact_factor is False:
+                    return None
+                if impact_factor is not None:
+                    return impact_factor
+        
+        print_warn(f"Impact Factor not found on Wikipedia page {journal_name}")
         return None
     except Exception as e:
         print_error(f"An error occurred: {e}")
         return None
 
 def parse_if_from_wikipedia(html_content):
+    if not html_content:
+        return None
     soup = BeautifulSoup(html_content, "html.parser")
     impact_factor_row = soup.find('th', string='Impact factor')
     if impact_factor_row:
         impact_factor_data = impact_factor_row.find_next_sibling('td')
         if impact_factor_data:
-            return impact_factor_data.text.strip().split(' ')[0]
+            impact_factor_data_array = impact_factor_data.text.strip().split(' ')
+            impact_factor = impact_factor_data_array[0].strip()
+            year = impact_factor_data_array[1].strip().replace('(', '').replace(')', '')
+            current_year = int(time.strftime("%Y"))
+            if year and int(year) <= (current_year - 2):
+                print_warn(f"Year is {year}. Impact Factor outdated.")
+                return False
+            return impact_factor
     return None
 
 
@@ -109,11 +130,33 @@ async def fetch_if_from_bioxbio(journal_name):
                 #await page.wait_for_selector('table.table-bordered', timeout=10000)
 
                 # Directly extract the Impact Factor from the table using Playwright
-                impact_factor = await page.evaluate('''() => {
+                impact_factor_array = await page.evaluate('''() => {
                     const table = document.querySelector('table.table-bordered');
+                    if (!table) {
+                        return [];
+                    }
                     const secondRow = table.querySelectorAll('tr')[1];
-                    return secondRow ? secondRow.children[1].textContent.trim() : 'Impact Factor not found';
+                    return secondRow ? [
+                        secondRow.children[0].textContent.trim(),
+                        secondRow.children[1].textContent.trim()
+                    ] : [];
                 }''')
+
+                if not impact_factor_array or len(impact_factor_array) != 2:
+                    print_warn("Impact Factor table not found.")
+                    return None
+
+                # Extracting year and impact factor
+                year = impact_factor_array[0].split(' ')[0] if impact_factor_array else None
+                impact_factor = impact_factor_array[1] if impact_factor_array else None
+                if not impact_factor:
+                    print_warn("Impact Factor not found.")
+                    return None
+                
+                current_year = int(time.strftime("%Y"))
+                if year and int(year) <= (current_year - 2):
+                    print_warn(f"Year is {year}. Impact Factor outdated.")
+                    return None
 
                 #print(f"Impact Factor: {impact_factor}")
                 return impact_factor

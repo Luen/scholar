@@ -212,7 +212,7 @@ async def get_url_content_using_browser(url):
                 response = await page.goto(url, wait_until="networkidle", timeout=60000) # wait_until="load" or "domcontentloaded"
             except Exception as e:
                 #await page.screenshot(path='fail1.png')
-                print_error(f"An error occurred: {e}, retrying in 60 seconds")
+                print_error(f"get_url_content_using_browser() An error occurred: {e}, retrying in 60 seconds")
                 time.sleep(60)
                 response = await page.goto(url, wait_until="networkidle", timeout=60000) # wait_until="load" or "domcontentloaded"
 
@@ -232,7 +232,7 @@ async def get_url_content_using_browser(url):
 
             return html
     except Exception as e:
-        print_error(f"An error occurred: {e}")
+        print_error(f"get_url_content_using_browser() An error occurred: {e}")
         return None
     finally:
         if browser:
@@ -272,10 +272,44 @@ def normalise_url(url):
         "http://": "https://",
         "//www.": "//"
     }
+    parsed_url = urlparse(url)
+    # Remove query and fragment parts
+    normalized_url = parsed_url._replace(query='', fragment='').geturl()
+    normalized_url = normalized_url.rstrip('/')
     for old, new in replacements.items():
-        url = url.replace(old, new)
-    return url.split("?")[0]
+        normalized_url = normalized_url.replace(old, new)
+    return normalized_url
 
+def are_urls_equal(url1, url2): 
+    if normalise_url(url1) == normalise_url(url2):
+        return True
+    
+    # Extract hostnames and paths
+    parsed_url1 = urlparse(url1)
+    parsed_url2 = urlparse(url2)
+    
+    # Check if hostnames are the same
+    if parsed_url1.hostname == parsed_url2.hostname:
+        # Compare the last two parts of the path
+        last_two_parts1 = "/".join(parsed_url1.path.strip('/').split("/")[-2:])
+        last_two_parts2 = "/".join(parsed_url2.path.strip('/').split("/")[-2:])
+        if last_two_parts1 == last_two_parts2:
+            return True
+        replacements = {
+            "/article-abstract": "/article",
+            "/article-lookup": "/article",
+        }
+        first_two_parts1 = "/".join(parsed_url1.path.strip('/').split("/")[:2])
+        first_two_parts2 = "/".join(parsed_url2.path.strip('/').split("/")[:2])
+        for old, new in replacements.items():
+            first_two_parts1 = first_two_parts1.replace(old, new)
+            first_two_parts2 = first_two_parts2.replace(old, new)
+        if first_two_parts1 == first_two_parts2:
+            print_warn(f"Possible URL Match: {url1} {url2}")
+            return True
+        return True
+    
+    return False
 
 def extract_doi_from_url(url):
     # Regex pattern to find DOI in URL
@@ -327,7 +361,7 @@ def check_doi_via_redirect(doi, expected_url, expected_html, attempts=1):
             print(f"Sleeping for {sleep} hour")
             time.sleep(sleep)
             return check_doi_via_redirect(doi, expected_url, expected_html, attempts+1)
-        if normalise_url(follow_url) == normalise_url(expected_url): # Check if the URL redirects to the expected URL
+        if are_urls_equal(follow_url, expected_url): # Check if the URL redirects to the expected URL
             return True
         if "Rummer" in page_html:
             print_warn(f"Verifying DOI: 'Rummer' found in HTML of {doi}. Expected URL: {expected_url}")
@@ -348,6 +382,7 @@ def has_captcha(html):
 def get_doi_api(doi):
     if not doi:
         return None
+    # https://doi.org/api/handles/10.1242/jeb.243973
     api_url = f"https://doi.org/api/handles/{doi}"
     try:
         with urllib.request.urlopen(api_url) as response:
@@ -373,6 +408,7 @@ def get_doi_resolved_link(doi):
         print_error(f"Failed to get resolved link for DOI {doi}: {e}")
     return link
 
+
 # Verify the DOI against the URL
 def check_doi_via_api(doi, expected_url):
     if not doi or not expected_url:
@@ -380,7 +416,7 @@ def check_doi_via_api(doi, expected_url):
     link = get_doi_resolved_link(doi)
     if not link:
         return None
-    if normalise_url(link) == normalise_url(expected_url):
+    if are_urls_equal(link, expected_url):
         return True
     # check end part of doi to see if it's in the new url
     # e.g., 10.1242/jeb.243973 in https://journals.biologists.com/jeb/article/225/22/jeb243973/283144/Escape-response-kinematics-in-two-species-of
@@ -416,7 +452,7 @@ def get_doi_short_api(doi):
         print_error(f"URL error {e.reason}")
         return None
     except Exception as e:
-        print_error(f"An error occurred: {e}")
+        print_error(f"get_doi_short_api() An error occurred: {e}")
         return None
 
 

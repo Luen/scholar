@@ -24,6 +24,10 @@ source scholarly-api/bin/activate
 pip install -r requirements.txt
 0 * * * * /path/to/your_bash_script.sh
 ```
+4. Test run.
+```
+python main.py ynWS968AAAAJ
+```
 
 # Testing
 Install pytest and run it using the command `pytest`. 
