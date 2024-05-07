@@ -1,3 +1,5 @@
+# Generate a JSON file with the author's publications, including DOI and Impact Factor
+
 import sys
 import time
 import json

@@ -4,6 +4,7 @@ import re
 import io
 import urllib.request
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from standardise import levenshtein
 import asyncio
 from playwright.async_api import async_playwright
@@ -18,6 +19,8 @@ def get_doi(url):
         return doi_in_url
     
     # e.g., https://scholar.google.com/scholar?cluster=4186906934658759747&hl=en&oi=scholarr
+    #host = urlparse(url).hostname
+    #if host and host.endswith("scholar.google.com"):
     if "scholar.google.com" in url:
         # TO DO: Extract paper title from Google Scholar URL then Google the title to get the publication url and then the DOI from the publication page
         print_error("TO DO!!!! Get DOI from Google Scholar URL")
@@ -378,3 +381,4 @@ def get_doi_short_link(doi_short):
     if not doi_short:
         return None
     return "https://doi.org/" + doi_short
+
