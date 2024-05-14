@@ -34,7 +34,7 @@ def fetch_if_from_wikipedia(journal_name):
         # Try to get the Wikipedia page for the journal
         page = wikipedia.page(journal_name.replace(' ', '_').title()+"_(journal)") # E.g., https://en.wikipedia.org/wiki/Significance_(journal)
         if page:
-            impact_factor = parse_if_from_wikipedia(page.html) # Note the lack of () which is intentional as pymediawiki handles the .page differently
+            impact_factor = parse_if_from_wikipedia(page.html)
             if impact_factor is False:
                 return None
             if impact_factor is not None:
@@ -50,7 +50,7 @@ def fetch_if_from_wikipedia(journal_name):
                 time.sleep(10)
                 page = wikipedia.page(option)
             if page:
-                impact_factor = parse_if_from_wikipedia(page.html())
+                impact_factor = parse_if_from_wikipedia(page.html)
                 if impact_factor is False:
                     return None
                 if impact_factor is not None:
@@ -63,7 +63,7 @@ def fetch_if_from_wikipedia(journal_name):
             time.sleep(10)
             page = wikipedia.page(search[0])
             if page:
-                impact_factor = parse_if_from_wikipedia(page.html())
+                impact_factor = parse_if_from_wikipedia(page.html)
                 if impact_factor is False:
                     return None
                 if impact_factor is not None:
@@ -106,63 +106,65 @@ async def fetch_if_from_bioxbio(journal_name):
         async with async_playwright() as p:
             # Launch the browser
             browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
+            async with browser:
 
-            # Construct the URL and navigate to the page
-            url = f"https://www.bioxbio.com/search/?q={journal_name.replace(' ', '+')}"
-            await page.goto(url)
+                page = await browser.new_page()
 
-            # Wait for the necessary elements to load
-            await page.wait_for_selector('div.gsc-expansionArea', timeout=10000)
+                # Construct the URL and navigate to the page
+                url = f"https://www.bioxbio.com/search/?q={journal_name.replace(' ', '+')}"
+                await page.goto(url)
 
-            # Get the search results
-            results = await page.query_selector_all('div.gsc-webResult.gsc-result')
-            if not results:
-                print("No results found")
-                return None
+                # Wait for the necessary elements to load
+                await page.wait_for_selector('div.gsc-expansionArea', timeout=10000)
 
-            first_result_link = await results[0].query_selector('a.gs-title')
-            if first_result_link:
-                # Click the first result link and wait for the navigation to complete
-                link = await first_result_link.get_attribute('href')
-                await page.goto(link, wait_until='load')
-
-                # Wait for the table to load on the new page
-                #await page.wait_for_selector('table.table-bordered', timeout=10000)
-
-                # Directly extract the Impact Factor from the table using Playwright
-                impact_factor_array = await page.evaluate('''() => {
-                    const table = document.querySelector('table.table-bordered');
-                    if (!table) {
-                        return [];
-                    }
-                    const secondRow = table.querySelectorAll('tr')[1];
-                    return secondRow ? [
-                        secondRow.children[0].textContent.trim(),
-                        secondRow.children[1].textContent.trim()
-                    ] : [];
-                }''')
-
-                if not impact_factor_array or len(impact_factor_array) != 2:
-                    print_warn("Impact Factor table not found.")
+                # Get the search results
+                results = await page.query_selector_all('div.gsc-webResult.gsc-result')
+                if not results:
+                    print("No results found")
                     return None
 
-                # Extracting year and impact factor
-                impact_factor_year = impact_factor_array[0].split(' ')[0] if impact_factor_array else None
-                impact_factor = impact_factor_array[1] if impact_factor_array else None
-                if not impact_factor:
-                    print_warn("Impact Factor not found.")
-                    return None
+                first_result_link = await results[0].query_selector('a.gs-title')
+                if first_result_link:
+                    # Click the first result link and wait for the navigation to complete
+                    link = await first_result_link.get_attribute('href')
+                    await page.goto(link, wait_until='load')
+
+                    # Wait for the table to load on the new page
+                    #await page.wait_for_selector('table.table-bordered', timeout=10000)
+
+                    # Directly extract the Impact Factor from the table using Playwright
+                    impact_factor_array = await page.evaluate('''() => {
+                        const table = document.querySelector('table.table-bordered');
+                        if (!table) {
+                            return [];
+                        }
+                        const secondRow = table.querySelectorAll('tr')[1];
+                        return secondRow ? [
+                            secondRow.children[0].textContent.trim(),
+                            secondRow.children[1].textContent.trim()
+                        ] : [];
+                    }''')
+
+                    if not impact_factor_array or len(impact_factor_array) != 2:
+                        print_warn("Impact Factor table not found.")
+                        return None
+
+                    # Extracting year and impact factor
+                    impact_factor_year = impact_factor_array[0].split(' ')[0] if impact_factor_array else None
+                    impact_factor = impact_factor_array[1] if impact_factor_array else None
+                    if not impact_factor:
+                        print_warn("Impact Factor not found.")
+                        return None
+                    
+                    current_year = int(time.strftime("%Y"))
+                    if impact_factor_year and int(impact_factor_year) < (current_year - 2):
+                        print_warn(f"Year is {impact_factor_year}. Impact Factor outdated.")
+                        return None
+
+                    #print(f"Impact Factor: {impact_factor}")
+                    return impact_factor
                 
-                current_year = int(time.strftime("%Y"))
-                if impact_factor_year and int(impact_factor_year) < (current_year - 2):
-                    print_warn(f"Year is {impact_factor_year}. Impact Factor outdated.")
-                    return None
-
-                #print(f"Impact Factor: {impact_factor}")
-                return impact_factor
-            
-            print_warn("First result link not found.")
+                print_warn("First result link not found.")
         return None
     except Exception as e:
         print_error(f"Error fetching from BioxBio: {e}")

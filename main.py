@@ -15,6 +15,23 @@ if not len(sys.argv) == 2:
 
 scholar_id = sys.argv[1]
 
+
+def load_impact_factor_json_file(file_path):
+    try:
+        with open(file_path, "r") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        print_warn(f"Error loading JSON from {file_path}. File may be empty or malformed.")
+        return {}
+    except FileNotFoundError:
+        print_warn(f"File {file_path} not found. Creating a new one.")
+        return {}
+    
+def save_impact_factor_json_file(file_path, data):
+    with open(file_path, "w") as f:
+        json.dump(data, f, indent=4)
+
+
 try:
     print(f"Getting author with ID: {scholar_id}")
     print("This script will take a while to complete due to the rate limits of the scraping website and APIs used")
@@ -42,7 +59,7 @@ try:
         standardised_authors = standardise_authors(authors)
         filled_pub['bib']['authors_standardised'] = standardised_authors
 
-        if not "symposium" in journal_name or not "conference" in journal_name or not "workshop" in journal_name or not "annual meeting" in journal_name:
+        if not ("symposium" in journal_name or "conference" in journal_name or "workshop" in journal_name or "annual meeting" in journal_name):
             # Get DOI
             print(f"Getting DOI for {pub_url}")
 
@@ -75,14 +92,23 @@ try:
             filled_pub['doi_resolved_link'] = resolved_link if resolved_link else ""
 
             # Get Impact Factor
+            impact_factor_json = load_impact_factor_json_file("journal_impact_factor.json")
             impact_factor = None
             if journal_name:
-                print(f"Getting impact factor for {journal_name}")
-                impact_factor = get_impact_factor(journal_name.lower())
-                print_info(f"Impact factor: {impact_factor}")
+                if journal_name.lower() not in impact_factor_json:
+                    print_warn("TODO: Implement a search function if the journal name isn't exactly the same - e.g., levenshtein.") # https://github.com/Luen/google-scholar-references-py/blob/main/references.py
+                    print(f"Getting impact factor for {journal_name}")
+                    impact_factor = get_impact_factor(journal_name.lower())
+                    print_info(f"Impact factor: {impact_factor}")
+                    # Add impact factor to journal_impact_factor.json
+                    impact_factor_json[journal_name.lower()] = impact_factor
+                    save_impact_factor_json_file("journal_impact_factor.json", impact_factor_json)
+                else:
+                    print_info(f"Impact factor found in journal_impact_factor.json")
             else:
                 print_warn(f"Journal name not found.")
             filled_pub['bib']['impact_factor'] = impact_factor
+
         else: 
             print_warn(f"Skipping DOI and Impact Factor for symposium, conference, workshop, or annual meeting: {journal_name}")
             filled_pub['doi'] = ""
