@@ -1,0 +1,11 @@
+services:
+  scholarly:
+    build: .
+    container_name: scholarly
+    environment:
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "5000:5000"  # Map Flask port 5000 to local port 5000
+    volumes:
+      - .:/app       # Mount the current directory to the app directory in the container
+    command: python main.py

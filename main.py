@@ -4,33 +4,18 @@ import sys
 import time
 import json
 from scholarly import scholarly
-from journal_impact_factor import get_impact_factor
+from journal_impact_factor import load_impact_factor, add_impact_factor
 from doi import get_doi, get_doi_from_title, get_doi_link, get_doi_resolved_link, get_doi_short, get_doi_short_link, are_urls_equal
 from standardise import standardise_authors
 from logger import print_error, print_warn, print_info
 
 if not len(sys.argv) == 2:
-    print_error("Usage: python generate.py scholar_id\nExample: python generate.py ynWS968AAAAJ")
+    print_error("Usage: python main.py scholar_id\nExample: python main.py ynWS968AAAAJ")
     sys.exit(1)
 
 scholar_id = sys.argv[1]
 
-
-def load_impact_factor_json_file(file_path):
-    try:
-        with open(file_path, "r") as f:
-            return json.load(f)
-    except json.JSONDecodeError:
-        print_warn(f"Error loading JSON from {file_path}. File may be empty or malformed.")
-        return {}
-    except FileNotFoundError:
-        print_warn(f"File {file_path} not found. Creating a new one.")
-        return {}
-    
-def save_impact_factor_json_file(file_path, data):
-    with open(file_path, "w") as f:
-        json.dump(data, f, indent=4)
-
+journal_impact_factor = load_impact_factor()
 
 try:
     print(f"Getting author with ID: {scholar_id}")
@@ -92,19 +77,15 @@ try:
             filled_pub['doi_resolved_link'] = resolved_link if resolved_link else ""
 
             # Get Impact Factor
-            impact_factor_json = load_impact_factor_json_file("journal_impact_factor.json")
             impact_factor = None
             if journal_name:
-                if journal_name.lower() not in impact_factor_json:
+                if journal_name.lower() not in journal_impact_factor:
                     print_warn("TODO: Implement a search function if the journal name isn't exactly the same - e.g., levenshtein.") # https://github.com/Luen/google-scholar-references-py/blob/main/references.py
-                    print(f"Getting impact factor for {journal_name}")
-                    impact_factor = get_impact_factor(journal_name.lower())
-                    print_info(f"Impact factor: {impact_factor}")
-                    # Add impact factor to journal_impact_factor.json
-                    impact_factor_json[journal_name.lower()] = impact_factor
-                    save_impact_factor_json_file("journal_impact_factor.json", impact_factor_json)
+                    print(f"Impact factor for {journal_name}")
+                    add_impact_factor(journal_name, '')
                 else:
-                    print_info(f"Impact factor found in journal_impact_factor.json")
+                    print_info(f"Impact factor found")
+                    impact_factor = journal_impact_factor[journal_name.lower()]
             else:
                 print_warn(f"Journal name not found.")
             filled_pub['bib']['impact_factor'] = impact_factor
