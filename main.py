@@ -52,7 +52,14 @@ try:
         standardised_authors = standardise_authors(authors)
         filled_pub['bib']['authors_standardised'] = standardised_authors
 
-        if not ("symposium" in journal_name or "conference" in journal_name or "workshop" in journal_name or "annual meeting" in journal_name):
+        if ("symposium" in journal_name or "conference" in journal_name or "workshop" in journal_name or "annual meeting" in journal_name):
+            print_warn(f"Skipping DOI and Impact Factor for symposium, conference, workshop, or annual meeting: {journal_name}")
+            filled_pub['doi'] = ""
+            filled_pub['doi_link'] = ""
+            filled_pub['doi_short'] = ""
+            filled_pub['doi_short_link'] = ""
+            filled_pub['bib']['impact_factor'] = ""
+        else:
             # Get DOI
             print(f"Getting DOI for {pub_url}")
 
@@ -66,7 +73,8 @@ try:
                 if "scholar.google.com" in pub_url and pub_title:
                     doi = get_doi_from_title(pub_title)
                 else:
-                    doi = get_doi(pub_url)
+                    print_error(f"testing {author['name'].split()[-1]}")
+                    doi = get_doi(pub_url, author['name'].split()[-1])
             if not doi:
                 print_warn("DOI not found. Trying to get DOI from the publication title.")
             else:
@@ -110,25 +118,17 @@ try:
                 else:
                     if journal_name not in missing_journals:
                         print_warn("TODO: Implement a search function if the journal name isn't exactly the same - e.g., levenshtein. OR FILL OUT IMPACT FACTOR SHEET.")
-                        print_error(f"Missing impact factor for {journal_name}")
+                        print_error(f"Missing impact factor for {journal_name}. Adding to Google Sheet soy ou can add.")
                         missing_journals.add(journal_name)
                         add_impact_factor(journal_name, '')
             else:
                 print_warn("Journal name not found.")
             filled_pub['bib']['impact_factor'] = impact_factor
 
-        else: 
-            print_warn(f"Skipping DOI and Impact Factor for symposium, conference, workshop, or annual meeting: {journal_name}")
-            filled_pub['doi'] = ""
-            filled_pub['doi_link'] = ""
-            filled_pub['doi_short'] = ""
-            filled_pub['doi_short_link'] = ""
-            filled_pub['bib']['impact_factor'] = ""
-
         # Add to list of processed publications
         filled_publications.append(filled_pub)
-        print("Sleeping for 10 seconds...")
-        time.sleep(10)  # Be polite with the rate of requests
+        #print("Sleeping for 10 seconds...")
+        #time.sleep(10)  # Be polite with the rate of requests
 
     # Update the author data with processed publications
     author["publications"] = filled_publications

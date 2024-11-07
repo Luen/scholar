@@ -18,7 +18,10 @@ from functools import lru_cache
 from logger import print_error, print_warn, print_info
 
 # List of websites that block web scrapers
-sites_blocking_scrappers = ["sciencedirect.com", "journals.biologists.com"]
+sites_blocking_scrappers = ["www.sciencedirect.com", "journals.biologists.com"]
+
+# Dic of domains and times last scraped
+last_scraped = {}
 
 def get_saved_html_path(url):
     """
@@ -55,7 +58,7 @@ def load_html_from_file(url):
             return f.read()
     return None
 
-def get_doi(url):
+def get_doi(url, author):
     # Extract DOI URL e.g., https://onlinelibrary.wiley.com/doi/abs/10.1111/gcb.12455 which has the 10.1111/gcb.12455 (https://doi.org/10.1111/gcb.12455)
     doi_in_url = extract_doi_from_url(url)
     if doi_in_url:
@@ -87,10 +90,8 @@ def get_doi(url):
             if slug in doi: # If the DOI contains the URL slug, it is likely the correct one e.g, https://www.nature.com/articles/nclimate2195 which has nclimate2195 (https://doi.org/10.1038/nclimate2195)
                 return doi
             if check_doi_via_api(doi, url): # URL the DOI api to verify the URL
-               time.sleep(1)
                return doi
-            if check_doi_via_redirect(doi, url, html): # Check if the DOI redirects to the URL
-                time.sleep(1)
+            if check_doi_via_redirect(doi, url, html, author): # Check if the DOI redirects to the URL
                 print_warn(f"Verified DOI via redirect: {doi} goes to {url}")
                 return doi
         # Return the first DOI if none of the above conditions are met
@@ -101,6 +102,13 @@ def get_doi(url):
 def get_doi_from_title(pub_title):
     # Google Search the publication's title to find what is likely the publication's url and then the DOI from that page
     print(f"Publication URL is a Google Scholar URL. Publication Title: {pub_title}")
+
+    domain = "google.com"
+    if domain in last_scraped and time.time() - last_scraped[domain] < 30:
+        print(f"Sleeping for 10 seconds to avoid being blocked by {domain}")
+        time.sleep(10)
+    last_scraped[domain] = time.time()
+
     results = search(pub_title)
     doi = None
     for result in results:
@@ -108,7 +116,6 @@ def get_doi_from_title(pub_title):
         doi = get_doi(result)
         if doi:
             return doi
-        time.sleep(1)
     return None
 
 def get_content_from_pdf(pdf_bytes, url):
@@ -136,6 +143,15 @@ def get_content_from_pdf(pdf_bytes, url):
 
 @lru_cache(maxsize=1000)
 def get_url_content_using_urllib(url):
+    """Fetch the HTML content using urllib.request."""
+
+    domain = urlparse(url).hostname
+    if domain in last_scraped and time.time() - last_scraped[domain] < 30:
+        print(f"Sleeping for 10 seconds to avoid being blocked by {domain}")
+        time.sleep(10)
+
+    last_scraped[domain] = time.time()
+
     headers = {"User-Agent": "Mozilla/5.0"}
     req = urllib.request.Request(url, headers=headers)
     try:
@@ -168,6 +184,13 @@ def get_url_content_using_urllib(url):
 @lru_cache(maxsize=1000)
 async def get_url_content_using_browser(url):
     """Fetch the HTML content using SeleniumBase with undetected-chromedriver."""
+
+    domain = urlparse(url).hostname
+    if domain in last_scraped and time.time() - last_scraped[domain] < 30:
+        print(f"Sleeping for 10 seconds to avoid being blocked by {domain}")
+        time.sleep(10)
+    last_scraped[domain] = time.time()
+
     try:
         # SeleniumBase configuration with stealth mode enabled
         with SB(uc=True, headless=True) as sb:  # Enables undetected Chrome in headless mode
@@ -291,12 +314,18 @@ def extract_doi_from_url(url):
     return None
 
 @lru_cache(maxsize=1000)
-def check_doi_via_redirect(doi, expected_url, expected_html, attempts=1):
+def check_doi_via_redirect(doi, expected_url, expected_html, author, attempts=1):
     if not doi:
         return False
+    
+    domain = urlparse(expected_url).hostname
+    if domain in last_scraped and time.time() - last_scraped[domain] < 30:
+        print(f"Sleeping for 10 seconds to avoid being blocked by {domain}")
+        time.sleep(10)
+    last_scraped[domain] = time.time()
+
     short_url = f"https://doi.org/{doi}"
     headers = {"User-Agent": "Googlebot/2.1 (+http://www.google.com/bot.html)"}
-    time.sleep(30)
     req = urllib.request.Request(short_url, headers=headers)
     try:
         opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor())
@@ -311,12 +340,13 @@ def check_doi_via_redirect(doi, expected_url, expected_html, attempts=1):
                 return False
             sleep = 60*60*attempts
             print(f"Sleeping for {sleep} hour")
+            print_error("TODO: USE TOR TO BYPASS CAPTCHA???")
             time.sleep(sleep)
-            return check_doi_via_redirect(doi, expected_url, expected_html, attempts+1)
+            return check_doi_via_redirect(doi, expected_url, expected_html, author, attempts+1)
         if are_urls_equal(follow_url, expected_url): # Check if the URL redirects to the expected URL
             return True
-        if "Rummer" in page_html:
-            print_warn(f"Verifying DOI: 'Rummer' found in HTML of {doi}. Expected URL: {expected_url}")
+        if author in page_html:
+            print_warn(f"Verifying DOI: '{author}' found in HTML of {doi}. Expected URL: {expected_url}")
             return True
         if levenshtein(page_html, expected_html) < 100: # Check if the HTML content is similar
             print_warn(f"Verifying DOI: Similar HTML content for DOI {doi} {expected_url}")
@@ -334,12 +364,18 @@ def has_captcha(html):
 def get_doi_api(doi):
     if not doi:
         return None
+    
+    domain = urlparse(doi).hostname
+    if domain in last_scraped and time.time() - last_scraped[domain] < 30:
+        print(f"Sleeping for 10 seconds to avoid being blocked by {domain}")
+        time.sleep(10)
+    last_scraped[domain] = time.time()
+
     # https://doi.org/api/handles/10.1242/jeb.243973
     api_url = f"https://doi.org/api/handles/{doi}"
     try:
         with urllib.request.urlopen(api_url) as response:
             data = json.load(response)
-            time.sleep(1)
             return data
     except HTTPError as err:
         print_error(f"HTTP error {err.code} for DOI {doi}: {err.reason}")
@@ -390,6 +426,13 @@ def get_doi_link(doi):
 def get_doi_short_api(doi):
     if not doi:
         return None
+    
+    domain = urlparse(doi).hostname
+    if domain in last_scraped and time.time() - last_scraped[domain] < 30:
+        print(f"Sleeping for 10 seconds to avoid being blocked by {domain}")
+        time.sleep(10)
+    last_scraped[domain] = time.time()
+
     # https://shortdoi.org/
     # e.g., https://shortdoi.org/10.1007/s10113-015-0832-z?format=json
     short_doi_url = f"https://shortdoi.org/{doi}?format=json"
