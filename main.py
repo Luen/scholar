@@ -73,7 +73,6 @@ try:
                 if "scholar.google.com" in pub_url and pub_title:
                     doi = get_doi_from_title(pub_title)
                 else:
-                    print_error(f"testing {author['name'].split()[-1]}")
                     doi = get_doi(pub_url, author['name'].split()[-1])
             if not doi:
                 print_warn("DOI not found. Trying to get DOI from the publication title.")
