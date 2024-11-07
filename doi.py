@@ -17,6 +17,9 @@ from googlesearch import search
 from functools import lru_cache
 from logger import print_error, print_warn, print_info
 
+# List of websites that block web scrapers
+sites_blocking_scrappers = ["sciencedirect.com", "journals.biologists.com"]
+
 def get_saved_html_path(url):
     """
     Generate a file path based on a hash of the URL.
@@ -62,7 +65,7 @@ def get_doi(url):
     html = None
 
     html = load_html_from_file(url)
-    if html is None:
+    if html is None and any(site in url for site in sites_blocking_scrappers):
         html = get_url_content_using_urllib(url)
     if html is None:
         print(f"Trying to fetch content via browser {url}")
@@ -95,7 +98,6 @@ def get_doi(url):
     
     return None
 
-
 def get_doi_from_title(pub_title):
     # Google Search the publication's title to find what is likely the publication's url and then the DOI from that page
     print(f"Publication URL is a Google Scholar URL. Publication Title: {pub_title}")
@@ -103,9 +105,10 @@ def get_doi_from_title(pub_title):
     doi = None
     for result in results:
         print_warn(f"Getting DOI from Google Search result {result}")
-        doi = get_doi(result, pub_title)
+        doi = get_doi(result)
         if doi:
             return doi
+        time.sleep(1)
     return None
 
 def get_content_from_pdf(pdf_bytes, url):
@@ -153,6 +156,10 @@ def get_url_content_using_urllib(url):
                 return None
     except HTTPError as err:
         print_error(f"Error fetching content from {url}: {err}")
+        if err.code == 403:
+            site = urlparse(url).hostname
+            print_warn(f"Adding {site} to sites_blocking_scrappers to prevent future attempts")
+            sites_blocking_scrappers.append(site)
         return None
     except UnicodeDecodeError as e:
         print_error(f"Decode error: {e}")
@@ -166,7 +173,7 @@ async def get_url_content_using_browser(url):
         with SB(uc=True, headless=True) as sb:  # Enables undetected Chrome in headless mode
             # Open the URL
             sb.open(url)
-            time.sleep(2) # Allow page elements to load
+            time.sleep(5) # Allow page elements to load
 
             # If link is a pdf, extract pdf text
             if url.lower().endswith(".pdf"):

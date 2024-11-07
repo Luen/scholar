@@ -4,10 +4,6 @@ This project uses a home server cronjob to scrape [Google Scholar](https://schol
 
 The JSON can then be used, for example, by uploading the data to a publicly accessible server via Secure Copy (SCP) or rsync, which serves the JSON data via a Flask application.
 
-## TO DO
-
-[] Load in previous json if available and get DOI and Short DOI from there if available.
-
 ## Installation
 
 ### Prerequisites
