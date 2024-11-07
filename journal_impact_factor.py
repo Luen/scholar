@@ -26,7 +26,6 @@ def load_impact_factor():
     # Create a dictionary with lowercase journal names as keys
     impact_factor_data = {journal_name.lower(): impact_factor for journal_name, impact_factor in zip(journal_names, impact_factors) if journal_name}
 
-    print_info(f"Loaded {len(impact_factor_data)} impact factors from Google Sheet.")
     return impact_factor_data
 
 def add_impact_factor(journal_name, impact_factor):
