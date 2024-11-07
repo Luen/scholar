@@ -19,8 +19,11 @@ scholar_id = sys.argv[1]
 journal_impact_factor_dic = load_impact_factor()
 print_info(f"Loaded {len(journal_impact_factor_dic)} impact factors from Google Sheet.")
 
-with open(os.path.join("cache_scholar", f"{scholar_id}.json"), "r") as f:
-    previous_data = json.load(f)
+# Load previous data, if available
+previous_data = {}
+if os.path.exists(os.path.join("cache_scholar", f"{scholar_id}.json")):
+    with open(os.path.join("cache_scholar", f"{scholar_id}.json"), "r") as f:
+        previous_data = json.load(f)
 
 try:
     print(f"Getting author with ID: {scholar_id}")
