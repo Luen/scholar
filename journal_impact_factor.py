@@ -15,8 +15,8 @@ def load_impact_factor():
     """
     Load the impact factor data from the Google Sheet and return it as a dictionary with lowercase keys.
     """
-    journal_names = sheet.col_values(1)  # Column A (Journal names)
-    impact_factors = sheet.col_values(2)  # Column B (Impact factors)
+    journal_names = sheet.col_values(1)[1:] # Column A (Journal names), excluding the header
+    impact_factors = sheet.col_values(2)[1:] # Column B (Impact factors), excluding the header
 
     # Extend lists to match length
     max_length = max(len(journal_names), len(impact_factors))
