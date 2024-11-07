@@ -16,6 +16,7 @@ if not len(sys.argv) == 2:
 scholar_id = sys.argv[1]
 
 journal_impact_factor = load_impact_factor()
+print_info(f"Loaded {len(journal_impact_factor)} impact factors from Google Sheet.")
 
 try:
     print(f"Getting author with ID: {scholar_id}")
@@ -77,15 +78,19 @@ try:
             filled_pub['doi_resolved_link'] = resolved_link if resolved_link else ""
 
             # Get Impact Factor
+            missing_journals = set()
             impact_factor = None
             if journal_name:
-                if journal_name.lower() not in journal_impact_factor:
-                    print_warn("TODO: Implement a search function if the journal name isn't exactly the same - e.g., levenshtein.") # https://github.com/Luen/google-scholar-references-py/blob/main/references.py
-                    print(f"Impact factor for {journal_name}")
-                    add_impact_factor(journal_name, '')
-                else:
+                journal_name = journal_name.strip()
+                if journal_name.lower() in journal_impact_factor:
                     print_info(f"Impact factor found")
                     impact_factor = journal_impact_factor[journal_name.lower()]
+                else:
+                    if journal_name not in missing_journals:
+                        print_warn("TODO: Implement a search function if the journal name isn't exactly the same - e.g., levenshtein.") # https://github.com/Luen/google-scholar-references-py/blob/main/references.py
+                        print_error(f"Missing impact factor for {journal_name}")
+                        missing_journals.add(journal_name)
+                        add_impact_factor(journal_name, '')
             else:
                 print_warn(f"Journal name not found.")
             filled_pub['bib']['impact_factor'] = impact_factor

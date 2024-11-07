@@ -19,11 +19,13 @@ def load_impact_factor():
     journal_names = sheet.col_values(1) # Column A (Journal names)
     impact_factors = sheet.col_values(2) # Column B (Impact factors)
 
-    # Combine the two lists into a list of dictionaries
-    impact_factor_data = []
-    for journal_name, impact_factor in zip(journal_names, impact_factors):
-        impact_factor_data.append({"journal_name": journal_name, "impact_factor": impact_factor})
-
+    # Extend the shorter list with None to match the length of the longer list
+    max_length = max(len(journal_names), len(impact_factors))
+    journal_names.extend([None] * (max_length - len(journal_names)))
+    impact_factors.extend([None] * (max_length - len(impact_factors)))
+    # Combine the two lists
+    impact_factor_data = list(zip(journal_names, impact_factors))
+    
     return impact_factor_data
 
 def add_impact_factor(journal_name, impact_factor):
