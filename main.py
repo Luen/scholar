@@ -3,6 +3,7 @@
 import sys
 import time
 import json
+import os
 from scholarly import scholarly
 from journal_impact_factor import load_impact_factor, add_impact_factor
 from doi import get_doi, get_doi_from_title, get_doi_link, get_doi_resolved_link, get_doi_short, get_doi_short_link, are_urls_equal
@@ -17,6 +18,9 @@ scholar_id = sys.argv[1]
 
 journal_impact_factor_dic = load_impact_factor()
 print_info(f"Loaded {len(journal_impact_factor_dic)} impact factors from Google Sheet.")
+
+with open(os.path.join("cache_scholar", f"{scholar_id}.json"), "r") as f:
+    previous_data = json.load(f)
 
 try:
     print(f"Getting author with ID: {scholar_id}")
@@ -49,26 +53,42 @@ try:
             # Get DOI
             print(f"Getting DOI for {pub_url}")
 
+            # Get DOI from previous data, if available
+            doi = previous_data.get('publications', [])[index].get('doi', '') if previous_data.get('publications', []) else None
+
             # e.g., https://scholar.google.com/scholar?cluster=4186906934658759747&hl=en&oi=scholarr
             #host = urlparse(url).hostname
             #if host and host.endswith("scholar.google.com"):
-            if "scholar.google.com" in pub_url and pub_title:
-                doi = get_doi_from_title(pub_title)
-            else: 
-                doi = get_doi(pub_url)
+            if not doi:
+                if "scholar.google.com" in pub_url and pub_title:
+                    doi = get_doi_from_title(pub_title)
+                else:
+                    doi = get_doi(pub_url)
             if not doi:
                 print_warn("DOI not found. Trying to get DOI from the publication title.")
             else:
                 print_info(f"DOI: {doi}")
-                doi_link = get_doi_link(doi)
-                print(f"DOI link: {doi_link}")
-                resolved_link = get_doi_resolved_link(doi)
-                print(f"DOI Resolves to: {resolved_link}")
-                if not are_urls_equal(pub_url, resolved_link):
-                    print_warn(f"Resolved link does not match publication URL:\n{pub_url}\n{resolved_link}")
-                doi_short = get_doi_short(doi)
-                print(f"Short DOI: {doi_short}")
-                doi_short_link = get_doi_short_link(doi_short)
+
+                # Get doi_link from previous data, if available
+                doi_link = previous_data.get('publications', [])[index].get('doi_link', '') if previous_data.get('publications', []) else None
+                if not doi_link:
+                    doi_link = get_doi_link(doi)
+                    print(f"DOI link: {doi_link}")
+                    resolved_link = get_doi_resolved_link(doi)
+                    print(f"DOI Resolves to: {resolved_link}")
+                    if not are_urls_equal(pub_url, resolved_link):
+                        print_warn(f"Resolved link does not match publication URL:\n{pub_url}\n{resolved_link}")
+
+                # Get doi_short from previous data, if available
+                doi_short = previous_data.get('publications', [])[index].get('doi_short', '') if previous_data.get('publications', []) else None
+                if not doi_short:
+                    doi_short = get_doi_short(doi)
+                    print(f"Short DOI: {doi_short}")
+
+                # Get doi_short_link from previous data, if available
+                doi_short_link = previous_data.get('publications', [])[index].get('doi_short_link', '') if previous_data.get('publications', []) else None
+                if not doi_short_link:
+                    doi_short_link = get_doi_short_link(doi_short)
 
             # Add DOI and Impact Factor to publication
             filled_pub['doi'] = doi if doi else ""
@@ -83,11 +103,10 @@ try:
             if journal_name:
                 journal_name = journal_name.strip().lower()  # Ensure journal name is lowercase for lookup
                 if journal_name in journal_impact_factor_dic:
-                    print_info("Impact factor found")
                     impact_factor = journal_impact_factor_dic[journal_name]
                 else:
                     if journal_name not in missing_journals:
-                        print_warn("TODO: Implement a search function if the journal name isn't exactly the same - e.g., levenshtein.")
+                        print_warn("TODO: Implement a search function if the journal name isn't exactly the same - e.g., levenshtein. OR FILL OUT IMPACT FACTOR SHEET.")
                         print_error(f"Missing impact factor for {journal_name}")
                         missing_journals.add(journal_name)
                         add_impact_factor(journal_name, '')

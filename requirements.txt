@@ -3,3 +3,4 @@ scholarly
 gspread
 oauth2client
 numpy
+seleniumbase

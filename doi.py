@@ -3,16 +3,54 @@ import json
 import re
 import io
 import os
+import hashlib
+import json
 import urllib.request
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from standardise import levenshtein
 import asyncio
-from playwright.async_api import async_playwright
+from seleniumbase import SB
+from selenium.webdriver.chrome.options import Options
 import pdfplumber
 from googlesearch import search
 from functools import lru_cache
 from logger import print_error, print_warn, print_info
+
+def get_saved_html_path(url):
+    """
+    Generate a file path based on a hash of the URL.
+    """
+    # Generate a unique filename based on the URL
+    hash_url = hashlib.md5(url.encode()).hexdigest()  # Use MD5 hash for a unique identifier
+    return os.path.join("html_cache", f"{hash_url}.html")
+
+def save_html_to_file(url, html_content):
+    """
+    Save the HTML content to a file.
+    """
+    # Ensure the directory exists
+    if not os.path.exists("html_cache"):
+        os.makedirs("html_cache")
+    
+    # Generate the file path
+    file_path = get_saved_html_path(url)
+    
+    # Save the HTML content to the file
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+    print_info(f"Saved HTML content to file: {file_path}")
+
+def load_html_from_file(url):
+    """
+    Load the HTML content from a file if it exists.
+    """
+    file_path = get_saved_html_path(url)
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return None
 
 def get_doi(url):
     # Extract DOI URL e.g., https://onlinelibrary.wiley.com/doi/abs/10.1111/gcb.12455 which has the 10.1111/gcb.12455 (https://doi.org/10.1111/gcb.12455)
@@ -22,7 +60,10 @@ def get_doi(url):
     
     slug = url.split('/')[-1]
     html = None
-    html = get_url_content_using_urllib(url)
+
+    html = load_html_from_file(url)
+    if html is None:
+        html = get_url_content_using_urllib(url)
     if html is None:
         print(f"Trying to fetch content via browser {url}")
         time.sleep(10)
@@ -100,9 +141,13 @@ def get_url_content_using_urllib(url):
             content = response.read()
             if 'application/pdf' in content_type or '.pdf' in url:
                 print(f"Extracting text from PDF {url}")
-                return get_content_from_pdf(content, url)
+                content = get_content_from_pdf(content, url)
+                save_html_to_file(url, content)
+                return content
             elif 'text/html' in content_type:
-                return content.decode('utf-8')
+                content = content.decode('utf-8')
+                save_html_to_file(url, content)
+                return content
             else:
                 print_error(f"Unsupported content type: {content_type}")
                 return None
@@ -115,128 +160,28 @@ def get_url_content_using_urllib(url):
 
 @lru_cache(maxsize=1000)
 async def get_url_content_using_browser(url):
-    browser = None  # Ensure the browser variable is accessible for the finally block
+    """Fetch the HTML content using SeleniumBase with undetected-chromedriver."""
     try:
-        async with async_playwright() as p:
-            # Launch the browser in headless mode
-            # Note that some websites may block headless browsers e.g., https://www.sciencedirect.com/science/article/pii/S1095643313002031
-            browser = await p.chromium.launch(
-                headless=True,
-                args=[
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-infobars',
-                    '--disable-blink-features=AutomationControlled',
-                    '--disable-extension',
-                    '--window-position=0,0',
-                    '--ignore-certificate-errors',
-                    '--ignore-certificate-errors-spki-list'
-                ]
-            )
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                viewport={'width': 1280, 'height': 1280},
-                accept_downloads=True, # Enables download in the context (for PDFs)
-            )
-            page = await context.new_page()
-
-            # Modify WebGL and Navigator properties to avoid detection
-            await page.add_init_script("""
-            navigator.webdriver = false;
-            Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3, 4, 5],
-            });
-            Object.defineProperty(navigator, 'languages', {
-                get: () => ['en-US', 'en'],
-            });
-            const getParameter = WebGLRenderingContext.prototype.getParameter;
-            WebGLRenderingContext.prototype.getParameter = function(parameter) {
-                if (parameter === 37445) {
-                    return 'NVIDIA Corporation';
-                }
-                if (parameter === 37446) {
-                    return 'NVIDIA GeForce GTX 660/PCIe/SSE2';
-                }
-                return getParameter(parameter);
-            };
-            """)
-
+        # SeleniumBase configuration with stealth mode enabled
+        with SB(uc=True, headless=True) as sb:  # Enables undetected Chrome in headless mode
+            # Open the URL
+            sb.open(url)
+            time.sleep(2) # Allow page elements to load
 
             # If link is a pdf, extract pdf text
-            if ".pdf" in url:
+            if url.lower().endswith(".pdf"):
                 print(f"Browser: Extracting text from PDF {url}")
-                # https://github.com/microsoft/playwright/issues/12777
-                temp_file_name = "temp.html"
-                temp_html = f"""<html><body><a href="{url}">{url}</a></body></html>"""
-                
-                file = os.path.realpath(__file__)
-                temp_dir = os.path.join(os.path.dirname(file), "temp")
-                
-                if not os.path.exists(temp_dir):
-                    os.makedirs(temp_dir)
-                
-                temp_html_path = os.path.join(temp_dir, temp_file_name)
-                
-                # Write the HTML to a temporary file
-                with open(temp_html_path, 'w', encoding='utf8') as f:
-                    f.write(temp_html)
-                
-                await page.goto("file://" + temp_html_path)
-                link = await page.query_selector('//a')
-                url = await link.get_attribute('href')
-                
-                # Download the PDF
-                async with page.expect_download() as download_info:
-                    await link.click(modifiers=["Alt"])
-                
-                download = await download_info.value
+                pdf_bytes = sb.download_file(url)  # Download the PDF file
+                if pdf_bytes:
+                    return get_content_from_pdf(pdf_bytes, url)
 
-                temp_pdf_path = os.path.join(temp_dir, download.suggested_filename)
-                await download.save_as(temp_pdf_path)               
-
-                # Read the PDF
-                with open(temp_pdf_path, "rb") as pdf_file:
-                    pdf_bytes = pdf_file.read()
-                
-                # Clean up
-                os.remove(temp_html_path)
-                os.remove(temp_pdf_path)
-                # If directory is empty, remove it
-                if not os.listdir(temp_dir):
-                    os.rmdir(temp_dir)
-
-                return get_content_from_pdf(pdf_bytes, url)
-
-            # Navigate to the page
-            try:
-                response = await page.goto(url, wait_until="networkidle", timeout=60000) # wait_until="load" or "domcontentloaded"
-            except Exception as e:
-                #await page.screenshot(path='fail1.png')
-                print_error(f"get_url_content_using_browser() An error occurred: {e}, retrying in 60 seconds")
-                time.sleep(60)
-                response = await page.goto(url, wait_until="networkidle", timeout=60000) # wait_until="load" or "domcontentloaded"
-
-            if response and not response.ok:
-                #await page.screenshot(path='fail2.png')
-                print_error(f"Failed to load the page, status: {response.status}")
-                return None
-        
-            # Sleep for 1 second
-            await asyncio.sleep(1)
-
-            #await page.screenshot(path='fail3.png')
-            # Get the page content
-            # html = await page.content()
-            # Render Page Content
-            html = await page.evaluate('document.body.innerHTML')
+            html = sb.get_page_source()
+            save_html_to_file(url, html) # Cache the HTML content
 
             return html
     except Exception as e:
-        print_error(f"get_url_content_using_browser() An error occurred: {e}")
+        print(f"[ERROR] An error occurred in get_url_content_using_browser: {e}")
         return None
-    finally:
-        if browser:
-            await browser.close()
 
 def parse_dois(html):
     if html is None:
