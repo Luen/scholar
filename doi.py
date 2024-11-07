@@ -68,7 +68,7 @@ def get_doi(url, author):
     html = None
 
     html = load_html_from_file(url)
-    if html is None and any(site in url for site in sites_blocking_scrappers):
+    if html is None and urlparse(url).hostname not in sites_blocking_scrappers:
         html = get_url_content_using_urllib(url)
     if html is None:
         print(f"Trying to fetch content via browser {url}")
