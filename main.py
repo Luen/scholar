@@ -71,7 +71,7 @@ try:
             #if host and host.endswith("scholar.google.com"):
             if not doi:
                 if "scholar.google.com" in pub_url and pub_title:
-                    doi = get_doi_from_title(pub_title)
+                    doi = get_doi_from_title(pub_title, author['name'].split()[-1])
                 else:
                     doi = get_doi(pub_url, author['name'].split()[-1])
             if not doi:

@@ -99,21 +99,21 @@ def get_doi(url, author):
     
     return None
 
-def get_doi_from_title(pub_title):
+def get_doi_from_title(pub_title, author):
     # Google Search the publication's title to find what is likely the publication's url and then the DOI from that page
     print(f"Publication URL is a Google Scholar URL. Publication Title: {pub_title}")
 
     domain = "google.com"
     if domain in last_scraped and time.time() - last_scraped[domain] < 30:
-        print(f"Sleeping for 10 seconds to avoid being blocked by {domain}")
-        time.sleep(10)
+        print(f"Sleeping for 1 seconds to avoid being blocked by {domain}")
+        time.sleep(1)
     last_scraped[domain] = time.time()
 
     results = search(pub_title)
     doi = None
     for result in results:
         print_warn(f"Getting DOI from Google Search result {result}")
-        doi = get_doi(result)
+        doi = get_doi(result, author)
         if doi:
             return doi
     return None
@@ -318,10 +318,10 @@ def check_doi_via_redirect(doi, expected_url, expected_html, author, attempts=1)
     if not doi:
         return False
     
-    domain = urlparse(expected_url).hostname
+    domain = 'doi.org'
     if domain in last_scraped and time.time() - last_scraped[domain] < 30:
-        print(f"Sleeping for 10 seconds to avoid being blocked by {domain}")
-        time.sleep(10)
+        print(f"Sleeping for 1 second to avoid being blocked by {domain}")
+        time.sleep(1)
     last_scraped[domain] = time.time()
 
     short_url = f"https://doi.org/{doi}"
@@ -365,10 +365,10 @@ def get_doi_api(doi):
     if not doi:
         return None
     
-    domain = urlparse(doi).hostname
+    domain = 'doi.org'
     if domain in last_scraped and time.time() - last_scraped[domain] < 30:
-        print(f"Sleeping for 10 seconds to avoid being blocked by {domain}")
-        time.sleep(10)
+        print(f"Sleeping for 1 second to avoid being blocked by {domain}")
+        time.sleep(1)
     last_scraped[domain] = time.time()
 
     # https://doi.org/api/handles/10.1242/jeb.243973
@@ -427,10 +427,10 @@ def get_doi_short_api(doi):
     if not doi:
         return None
     
-    domain = urlparse(doi).hostname
+    domain = 'shortdoi.org'
     if domain in last_scraped and time.time() - last_scraped[domain] < 30:
-        print(f"Sleeping for 10 seconds to avoid being blocked by {domain}")
-        time.sleep(10)
+        print(f"Sleeping for 1 second to avoid being blocked by {domain}")
+        time.sleep(1)
     last_scraped[domain] = time.time()
 
     # https://shortdoi.org/
