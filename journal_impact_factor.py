@@ -13,19 +13,20 @@ sheet = client.open_by_url(sheet_url).sheet1
 
 def load_impact_factor():
     """
-    Load the impact factor data from the Google Sheet and return it as a list of dictionaries.
+    Load the impact factor data from the Google Sheet and return it as a dictionary with lowercase keys.
     """
-    # Get all values in columns A and B
-    journal_names = sheet.col_values(1) # Column A (Journal names)
-    impact_factors = sheet.col_values(2) # Column B (Impact factors)
+    journal_names = sheet.col_values(1)  # Column A (Journal names)
+    impact_factors = sheet.col_values(2)  # Column B (Impact factors)
 
-    # Extend the shorter list with None to match the length of the longer list
+    # Extend lists to match length
     max_length = max(len(journal_names), len(impact_factors))
     journal_names.extend([None] * (max_length - len(journal_names)))
     impact_factors.extend([None] * (max_length - len(impact_factors)))
-    # Combine the two lists
-    impact_factor_data = list(zip(journal_names, impact_factors))
-    
+
+    # Create a dictionary with lowercase journal names as keys
+    impact_factor_data = {journal_name.lower(): impact_factor for journal_name, impact_factor in zip(journal_names, impact_factors) if journal_name}
+
+    print_info(f"Loaded {len(impact_factor_data)} impact factors from Google Sheet.")
     return impact_factor_data
 
 def add_impact_factor(journal_name, impact_factor):

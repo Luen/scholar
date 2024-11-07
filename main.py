@@ -15,8 +15,8 @@ if not len(sys.argv) == 2:
 
 scholar_id = sys.argv[1]
 
-journal_impact_factor = load_impact_factor()
-print_info(f"Loaded {len(journal_impact_factor)} impact factors from Google Sheet.")
+journal_impact_factor_dic = load_impact_factor()
+print_info(f"Loaded {len(journal_impact_factor_dic)} impact factors from Google Sheet.")
 
 try:
     print(f"Getting author with ID: {scholar_id}")
@@ -81,18 +81,18 @@ try:
             missing_journals = set()
             impact_factor = None
             if journal_name:
-                journal_name = journal_name.strip()
-                if journal_name.lower() in journal_impact_factor:
-                    print_info(f"Impact factor found")
-                    impact_factor = journal_impact_factor[journal_name.lower()]
+                journal_name = journal_name.strip().lower()  # Ensure journal name is lowercase for lookup
+                if journal_name in journal_impact_factor_dic:
+                    print_info("Impact factor found")
+                    impact_factor = journal_impact_factor_dic[journal_name]
                 else:
                     if journal_name not in missing_journals:
-                        print_warn("TODO: Implement a search function if the journal name isn't exactly the same - e.g., levenshtein.") # https://github.com/Luen/google-scholar-references-py/blob/main/references.py
+                        print_warn("TODO: Implement a search function if the journal name isn't exactly the same - e.g., levenshtein.")
                         print_error(f"Missing impact factor for {journal_name}")
                         missing_journals.add(journal_name)
                         add_impact_factor(journal_name, '')
             else:
-                print_warn(f"Journal name not found.")
+                print_warn("Journal name not found.")
             filled_pub['bib']['impact_factor'] = impact_factor
 
         else: 
