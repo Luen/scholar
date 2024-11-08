@@ -380,8 +380,9 @@ def check_doi_via_redirect(doi, expected_url, expected_html, author, attempts=1)
             return check_doi_via_redirect(doi, expected_url, expected_html, author, attempts+1)
         if are_urls_equal(follow_url, expected_url): # Check if the URL redirects to the expected URL
             return True
+        
         if author in page_html:
-            print_warn(f"Verifying DOI: '{author}' found in HTML of {doi}. Expected URL: {expected_url}")
+            print_warn(f"Verifying DOI: '{author}' found in HTML of {doi}.")
             return True
         #if levenshtein(page_html, expected_html) < 100: # Check if the HTML content is similar
         #    print_warn(f"Verifying DOI: Similar HTML content for DOI {doi} {expected_url}")
