@@ -5,7 +5,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     ports:
-      - "5000:5000"
+      - "8000:5000"
     volumes:
       - .:/app
-    command: python main.py
+    command: python serve.py

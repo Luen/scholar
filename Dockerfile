@@ -14,12 +14,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN apt-get update && apt-get install -y cron && rm -rf /var/lib/apt/lists/*
 
 # Add a new cron job to run main.py every two weeks
-RUN echo "0 0 */14 * * python /app/main.py >> /var/log/cron.log 2>&1" > /etc/cron.d/run_main
+RUN echo "0 0 */14 * * python /app/main.py ynWS968AAAAJ >> /var/log/cron.log 2>&1" > /etc/cron.d/run_main
 
 # Apply permissions to the cron job file
 RUN chmod 0644 /etc/cron.d/run_main && crontab /etc/cron.d/run_main
 
-# Expose the port for Flask application (if needed)
+# Expose the port for Flask application
 EXPOSE 5000
 
 # Start cron and keep container running

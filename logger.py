@@ -1,7 +1,7 @@
 import logging
 
-# Set up logging to a file with custom formatting
-logging.basicConfig(filename='logfile.txt', level=logging.DEBUG, format='%(message)s')
+# Set up logging to a file with custom formatting and timestamp
+logging.basicConfig(filename='logfile.txt', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def log_to_file(prefix, message):
     logging.info(f"{prefix}: {message}")
