@@ -46,7 +46,7 @@ def save_html_to_file(url, html_content):
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(html_content)
 
-    print_info(f"Saved HTML content to file: {file_path}")
+    print(f"Saved HTML content to file: {file_path}")
 
 def load_html_from_file(url):
     """
@@ -54,19 +54,15 @@ def load_html_from_file(url):
     """
     file_path = get_saved_html_path(url)
     if os.path.exists(file_path):
+        print("Loading HTML from file:", file_path)
         with open(file_path, "r", encoding="utf-8") as f:
             return f.read()
     return None
 
-def get_doi(url, author):
-    # Extract DOI URL e.g., https://onlinelibrary.wiley.com/doi/abs/10.1111/gcb.12455 which has the 10.1111/gcb.12455 (https://doi.org/10.1111/gcb.12455)
-    doi_in_url = extract_doi_from_url(url)
-    if doi_in_url:
-        return doi_in_url
-    
-    slug = url.split('/')[-1]
-    html = None
-
+def get_url_content(url):
+    """
+    Fetch the HTML content from a URL.
+    """
     html = load_html_from_file(url)
     if html is None and urlparse(url).hostname not in sites_blocking_scrappers:
         html = get_url_content_using_urllib(url)
@@ -77,9 +73,22 @@ def get_doi(url, author):
     if html is None:
         print_error(f"Failed to fetch content for {url}")
         return None
+    
+    save_html_to_file(url, html) # Cache the HTML content
+    return html
+
+def get_doi(url, author):
+    # Extract DOI URL e.g., https://onlinelibrary.wiley.com/doi/abs/10.1111/gcb.12455 which has the 10.1111/gcb.12455 (https://doi.org/10.1111/gcb.12455)
+    doi_in_url = extract_doi_from_url(url)
+    if doi_in_url:
+        return doi_in_url
+    
+    slug = url.split('/')[-1]
+
+    html = get_url_content(url)
 
     # Parse the page for DOIs
-    dois = parse_dois(html)
+    dois = parse_dois(html, url, author)
 
     if dois:
         if len(dois) == 1: # If there is only one DOI, it is likely to be correct
@@ -161,11 +170,9 @@ def get_url_content_using_urllib(url):
             if 'application/pdf' in content_type or '.pdf' in url:
                 print(f"Extracting text from PDF {url}")
                 content = get_content_from_pdf(content, url)
-                save_html_to_file(url, content)
                 return content
             elif 'text/html' in content_type:
                 content = content.decode('utf-8')
-                save_html_to_file(url, content)
                 return content
             else:
                 print_error(f"Unsupported content type: {content_type}")
@@ -206,16 +213,18 @@ async def get_url_content_using_browser(url):
                     return get_content_from_pdf(pdf_bytes, url)
 
             html = sb.get_page_source()
-            save_html_to_file(url, html) # Cache the HTML content
 
             return html
     except Exception as e:
         print(f"[ERROR] An error occurred in get_url_content_using_browser: {e}")
         return None
 
-def parse_dois(html):
+def parse_dois(html, url, author):
     if html is None:
         return []
+    
+    valid_matches = []  
+    
     #<meta name="prism.doi" content="doi:10.1038/nclimate2195"/>
     #<meta name="dc.identifier" content="doi:10.1038/nclimate2195"/>
     #<meta name="DOI" content="10.1038/nclimate2195"/>
@@ -235,9 +244,35 @@ def parse_dois(html):
     if matches:
         return matches
 
-    # Check rest of HTML for dois
+    # Check rest of HTML for DOIs, note that some of these will be references to other papers and not the current paper
     pattern = r"(?:https://doi.org/[^\/])?(10.\d{4,9}/[-._()/:a-zA-Z0-9]+)"
-    return list(set(re.findall(pattern, html, re.IGNORECASE)))
+    matches = list(set(re.findall(pattern, html, re.IGNORECASE)))
+    if matches:
+        print_warn(f"MIGHT BE WRONG DOI: {matches}")
+        # Check to see if DOI is valid and has author name in the html
+        for doi in matches:
+            # If DOI ends with /full, remove it
+            doi = doi.split("/full")[0]
+            # Remove matches that are too long to be DOIs
+            if len(doi) > 60:
+                print_warn(f"DOI TOO LONG ({len(doi)} characters): {doi}")
+                continue
+            print_warn(f"Checking DOI: {doi}")
+            if not check_doi_via_api(doi, url):
+                print_warn(f"Failed to verify DOI via API: {doi}")
+                continue
+            if not check_doi_via_redirect(doi, url, html, author): # Check if the DOI redirects to the URL
+                print_warn(f"Failed to verify DOI via redirect: {doi} goes to {url}")
+                continue
+            # Check html contains author name
+            link = get_doi_link(doi)
+            print(link)
+            html = get_url_content(link)
+            if author not in html:
+                print_warn(f"Failed to verify DOI: Author not found in HTML of {link}")
+                continue
+            return [doi]
+    return []
 
 def normalise_url(url):
     replacements = {
@@ -348,9 +383,9 @@ def check_doi_via_redirect(doi, expected_url, expected_html, author, attempts=1)
         if author in page_html:
             print_warn(f"Verifying DOI: '{author}' found in HTML of {doi}. Expected URL: {expected_url}")
             return True
-        if levenshtein(page_html, expected_html) < 100: # Check if the HTML content is similar
-            print_warn(f"Verifying DOI: Similar HTML content for DOI {doi} {expected_url}")
-            return True
+        #if levenshtein(page_html, expected_html) < 100: # Check if the HTML content is similar
+        #    print_warn(f"Verifying DOI: Similar HTML content for DOI {doi} {expected_url}")
+        #    return True
     except HTTPError as err:
         print(f"HTTP error {err.code} for DOI {doi}: {err.reason}")
     return False
@@ -374,8 +409,15 @@ def get_doi_api(doi):
     # https://doi.org/api/handles/10.1242/jeb.243973
     api_url = f"https://doi.org/api/handles/{doi}"
     try:
+        # Try loading json content from file
+        data = load_html_from_file(api_url)
+        if data:
+            return json.loads(data)
+        
         with urllib.request.urlopen(api_url) as response:
             data = json.load(response)
+            # Save html content to file
+            save_html_to_file(api_url, json.dumps(data, indent=4))
             return data
     except HTTPError as err:
         print_error(f"HTTP error {err.code} for DOI {doi}: {err.reason}")
@@ -437,8 +479,15 @@ def get_doi_short_api(doi):
     # e.g., https://shortdoi.org/10.1007/s10113-015-0832-z?format=json
     short_doi_url = f"https://shortdoi.org/{doi}?format=json"
     try:
+        # Try loading json content from file
+        data = load_html_from_file(short_doi_url)
+        if data:
+            return json.loads(data)
+        
         with urllib.request.urlopen(short_doi_url) as response:
             data = json.load(response)
+            # Save html content to file
+            save_html_to_file(short_doi_url, json.dumps(data, indent=4))
             return data
     except HTTPError as err:
         print_error(f"HTTP error {err.code} for short DOI {doi}: {err.reason}")
@@ -449,7 +498,6 @@ def get_doi_short_api(doi):
     except Exception as e:
         print_error(f"get_doi_short_api() An error occurred: {e}")
         return None
-
 
 def get_doi_short(doi):
     if not doi:

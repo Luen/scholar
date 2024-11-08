@@ -4,7 +4,7 @@ from doi import get_doi
 def test_get_doi():
     publication_url = "https://www.nature.com/articles/nclimate2195"
     expected_doi = "10.1038/nclimate2195"
-    assert get_doi(publication_url) == expected_doi
+    assert get_doi(publication_url, "Rummer") == expected_doi
 
 
 
@@ -46,3 +46,7 @@ def test_get_doi():
 #print(get_doi_short(doi))
 #print(get_doi_short_link(doi))
 
+
+
+#print(get_doi("https://www.medicalnewstoday.com/articles/how-much-stress-is-too-much-when-pregnant", "Rummer"))
+#print(get_doi("https://www.academia.edu/3753386/A_LITTLE_STRESS_FOR_A_FETUS_GOES_A_LONG_WAY", "Rummer"))

@@ -38,8 +38,19 @@ try:
 
     # Process each publication
     for index, pub in enumerate(author["publications"]):
-        #publication number of the publications
+        # Publication number of the publications
         print(f"Processing publication {index+1}/{len(author['publications'])}: {pub['bib']['title']}")
+
+        # If already in json file, get data from there but use new Impact Factor.
+        if previous_data.get('publications', []) and len(previous_data.get('publications', [])) > index:
+            filled_pub = previous_data.get('publications', [])[index]
+            print_warn("Impact Factor already found. Skipping.")
+            journal_name = filled_pub.get('bib', {}).get('journal', '') if filled_pub.get('bib', {}).get('journal', '') != "Null" else ''
+            journal_name = journal_name.strip().lower()
+            if journal_name in journal_impact_factor_dic:
+                filled_pub['bib']['impact_factor'] = journal_impact_factor_dic[journal_name]
+            filled_publications.append(filled_pub)
+            continue
 
         filled_pub = scholarly.fill(pub)
         pub_title = filled_pub.get('bib', {}).get('title', '')
@@ -111,13 +122,13 @@ try:
             missing_journals = set()
             impact_factor = None
             if journal_name:
-                journal_name = journal_name.strip().lower()  # Ensure journal name is lowercase for lookup
+                journal_name = journal_name.strip().lower() # Ensure journal name is lowercase for lookup
                 if journal_name in journal_impact_factor_dic:
                     impact_factor = journal_impact_factor_dic[journal_name]
                 else:
                     if journal_name not in missing_journals:
                         print_warn("TODO: Implement a search function if the journal name isn't exactly the same - e.g., levenshtein. OR FILL OUT IMPACT FACTOR SHEET.")
-                        print_error(f"Missing impact factor for {journal_name}. Adding to Google Sheet soy ou can add.")
+                        print_error(f"Missing impact factor for {journal_name}. Adding to Google Sheet so you can add.")
                         missing_journals.add(journal_name)
                         add_impact_factor(journal_name, '')
             else:
@@ -126,8 +137,13 @@ try:
 
         # Add to list of processed publications
         filled_publications.append(filled_pub)
-        #print("Sleeping for 10 seconds...")
-        #time.sleep(10)  # Be polite with the rate of requests
+
+        # Save progress
+        with open(f"{scholar_id}.json", "w") as f:
+            json.dump(author, f, indent=4)
+        
+        print("Sleeping for 1 second... Being polite with the rate of requests to Google Scholar.")
+        time.sleep(1)
 
     # Update the author data with processed publications
     author["publications"] = filled_publications

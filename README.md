@@ -62,11 +62,3 @@ Method: GET
 Description: Searches for authors by id.
 Parameter: id
 Example: [/ynWS968AAAAJ](http://127.0.0.1:5000/ynWS968AAAAJ)
-
-## License
-
-This open-sourced project is released under the [Unlicense](http://unlicense.org/).
-
-## Notes
-
-Alternative wikipedia packages: [wikipedia-api](https://github.com/martin-majlis/Wikipedia-API) and [pymediawiki](https://pypi.org/project/pymediawiki/)
