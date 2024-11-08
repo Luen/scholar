@@ -21,14 +21,15 @@ print_info(f"Loaded {len(journal_impact_factor_dic)} impact factors from Google 
 
 # Load previous data, if available
 previous_data = {}
-if os.path.exists(f"{scholar_id}.json"):
-    with open(f"{scholar_id}.json", "r") as f:
+file_path = os.path.join("scholar_data", f"{scholar_id}.json")
+if os.path.exists(file_path):
+    with open(file_path, "r") as f:
         previous_data = json.load(f)
         print_info(f"Loaded previous data for {scholar_id}.")
 
 try:
     print_misc(f"Getting author with ID: {scholar_id}")
-    print_misc("This script will take a while to complete due to the rate limits of the scraping website and APIs used")
+    print_misc("This script will take a while to complete due to the rate limits of the scraping website and APIs used.")
     author = scholarly.search_author_id(scholar_id)
     if not author or author is None:
         print_error("Author not found")
@@ -150,7 +151,7 @@ try:
     author["publications"] = filled_publications
     
     # Write author to file in JSON format
-    with open(f"{scholar_id}.json", "w") as f:
+    with open(file_path, "w") as f:
         json.dump(author, f, indent=4)
     print_info(f"DONE. Author data written to {scholar_id}.json")
 
