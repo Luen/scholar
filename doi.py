@@ -87,26 +87,31 @@ def get_doi(url, author):
 
     html = get_url_content(url)
 
-    # Parse the page for DOIs
-    dois = parse_dois(html, url, author)
+    dois_in_metadata = extract_doi_metadata(url)
+    if dois_in_metadata and len(dois_in_metadata) == 1: # If there is only one DOI, it is likely to be correct
+        return dois_in_metadata[0]
 
-    if dois:
-        if len(dois) == 1: # If there is only one DOI, it is likely to be correct
-            return dois[0]
-        for doi in dois: # If there are multiple DOIs on the page, check each one
-            print_misc("Multiple DOIs:", slug, doi)
-            # If part of slug in part of doi, then it is likely the correct one
-            if slug in doi: # If the DOI contains the URL slug, it is likely the correct one e.g, https://www.nature.com/articles/nclimate2195 which has nclimate2195 (https://doi.org/10.1038/nclimate2195)
-                return doi
-            if check_doi_via_api(doi, url): # URL the DOI api to verify the URL
-               return doi
-            if check_doi_via_redirect(doi, url, html, author): # Check if the DOI redirects to the URL
-                print_warn(f"Verified DOI via redirect: {doi} goes to {url}")
-                return doi
-        # Return the first DOI if none of the above conditions are met
-        #return dois[0]
+    # Parse the page for DOIs
+    dois_parsed = parse_dois(html, url, author)
+    dois = dois_in_metadata.extend(dois_parsed)
+    if not dois:
+        print_warn(f"No DOIs found in metadata or parsed HTML for {url}")
+        return None
+    if len(dois) == 1: # If there is only one DOI, it is likely to be correct
+        return dois[0]
+    for doi in dois: # If there are multiple DOIs on the page, check each one
+        print_misc("Multiple DOIs:", slug, doi)
+        # If part of slug in part of doi, then it is likely the correct one
+        if slug in doi: # If the DOI contains the URL slug, it is likely the correct one e.g, https://www.nature.com/articles/nclimate2195 which has nclimate2195 (https://doi.org/10.1038/nclimate2195)
+            return doi
+        if check_doi_via_api(doi, url): # URL the DOI api to verify the URL
+            return doi
+        if check_doi_via_redirect(doi, url, html, author): # Check if the DOI redirects to the URL
+            print_warn(f"Verified DOI via redirect: {doi} goes to {url}")
+            return doi
+    # Return the first DOI if none of the above conditions are met
+    #return dois[0]
     
-    return None
 
 def get_doi_from_title(pub_title, author):
     # Google Search the publication's title to find what is likely the publication's url and then the DOI from that page
@@ -219,11 +224,9 @@ async def get_url_content_using_browser(url):
         print_misc(f"[ERROR] An error occurred in get_url_content_using_browser: {e}")
         return None
 
-def parse_dois(html, url, author):
+def extract_doi_metadata(html):
     if html is None:
         return []
-    
-    valid_matches = []  
     
     #<meta name="prism.doi" content="doi:10.1038/nclimate2195"/>
     #<meta name="dc.identifier" content="doi:10.1038/nclimate2195"/>
@@ -243,7 +246,10 @@ def parse_dois(html, url, author):
     matches = list(set(re.findall(pattern, html, re.IGNORECASE)))
     if matches:
         return matches
+    
+    return []
 
+def parse_dois(html, url, author):
     # Check rest of HTML for DOIs, note that some of these will be references to other papers and not the current paper
     pattern = r"(?:https://doi.org/[^\/])?(10.\d{4,9}/[-._()/:a-zA-Z0-9]+)"
     matches = list(set(re.findall(pattern, html, re.IGNORECASE)))
@@ -253,6 +259,10 @@ def parse_dois(html, url, author):
         for doi in matches:
             # If DOI ends with /full, remove it
             doi = doi.split("/full")[0]
+            slug = url.split('/')[-1]
+            if slug in doi:
+                print_warn(f"DOI CONTAINS SLUG: {doi}")
+                return [doi]
             # Remove matches that are too long to be DOIs
             if len(doi) > 60:
                 print_warn(f"DOI TOO LONG ({len(doi)} characters): {doi}")
