@@ -21,9 +21,10 @@ print_info(f"Loaded {len(journal_impact_factor_dic)} impact factors from Google 
 
 # Load previous data, if available
 previous_data = {}
-if os.path.exists(os.path.join("cache_scholar", f"{scholar_id}.json")):
-    with open(os.path.join("cache_scholar", f"{scholar_id}.json"), "r") as f:
+if os.path.exists(f"{scholar_id}.json"):
+    with open(f"{scholar_id}.json", "r") as f:
         previous_data = json.load(f)
+        print_info(f"Loaded previous data for {scholar_id}.")
 
 try:
     print_misc(f"Getting author with ID: {scholar_id}")
@@ -31,7 +32,7 @@ try:
     author = scholarly.search_author_id(scholar_id)
     if not author or author is None:
         print_error("Author not found")
-        sys.exit(1)  # Exit if no author found
+        sys.exit(1) # Exit if no author found
 
     author = scholarly.fill(author)
     filled_publications = []
@@ -44,7 +45,7 @@ try:
         # If already in json file, get data from there but use new Impact Factor.
         if previous_data.get('publications', []) and len(previous_data.get('publications', [])) > index:
             filled_pub = previous_data.get('publications', [])[index]
-            print_warn("Impact Factor already found. Skipping.")
+            print_misc(f"Data already found for {filled_pub.get('pub_url', filled_pub.get('bib', {}).get('title', ''))}. Using existing data but updating Impact Factor.")
             journal_name = filled_pub.get('bib', {}).get('journal', '') if filled_pub.get('bib', {}).get('journal', '') != "Null" else ''
             journal_name = journal_name.strip().lower()
             if journal_name in journal_impact_factor_dic:
