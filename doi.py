@@ -15,7 +15,7 @@ from selenium.webdriver.chrome.options import Options
 import pdfplumber
 from googlesearch import search
 from functools import lru_cache
-from logger import print_error, print_warn, print_info
+from logger import print_error, print_warn, print_info, print_misc
 
 # List of websites that block web scrapers
 sites_blocking_scrappers = ["www.sciencedirect.com", "journals.biologists.com"]
@@ -46,7 +46,7 @@ def save_html_to_file(url, html_content):
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(html_content)
 
-    print(f"Saved HTML content to file: {file_path}")
+    print_misc(f"Saved HTML content to file: {file_path}")
 
 def load_html_from_file(url):
     """
@@ -54,7 +54,7 @@ def load_html_from_file(url):
     """
     file_path = get_saved_html_path(url)
     if os.path.exists(file_path):
-        print("Loading HTML from file:", file_path)
+        print_misc("Loading HTML from file:", file_path)
         with open(file_path, "r", encoding="utf-8") as f:
             return f.read()
     return None
@@ -67,7 +67,7 @@ def get_url_content(url):
     if html is None and urlparse(url).hostname not in sites_blocking_scrappers:
         html = get_url_content_using_urllib(url)
     if html is None:
-        print(f"Trying to fetch content via browser {url}")
+        print_misc(f"Trying to fetch content via browser {url}")
         time.sleep(10)
         html = asyncio.run(get_url_content_using_browser(url))
     if html is None:
@@ -94,7 +94,7 @@ def get_doi(url, author):
         if len(dois) == 1: # If there is only one DOI, it is likely to be correct
             return dois[0]
         for doi in dois: # If there are multiple DOIs on the page, check each one
-            print("Multiple DOIs:", slug, doi)
+            print_misc("Multiple DOIs:", slug, doi)
             # If part of slug in part of doi, then it is likely the correct one
             if slug in doi: # If the DOI contains the URL slug, it is likely the correct one e.g, https://www.nature.com/articles/nclimate2195 which has nclimate2195 (https://doi.org/10.1038/nclimate2195)
                 return doi
@@ -110,11 +110,11 @@ def get_doi(url, author):
 
 def get_doi_from_title(pub_title, author):
     # Google Search the publication's title to find what is likely the publication's url and then the DOI from that page
-    print(f"Publication URL is a Google Scholar URL. Publication Title: {pub_title}")
+    print_misc(f"Publication URL is a Google Scholar URL. Publication Title: {pub_title}")
 
     domain = "google.com"
     if domain in last_scraped and time.time() - last_scraped[domain] < 30:
-        print(f"Sleeping for 1 seconds to avoid being blocked by {domain}")
+        print_misc(f"Sleeping for 1 seconds to avoid being blocked by {domain}")
         time.sleep(1)
     last_scraped[domain] = time.time()
 
@@ -156,7 +156,7 @@ def get_url_content_using_urllib(url):
 
     domain = urlparse(url).hostname
     if domain in last_scraped and time.time() - last_scraped[domain] < 30:
-        print(f"Sleeping for 10 seconds to avoid being blocked by {domain}")
+        print_misc(f"Sleeping for 10 seconds to avoid being blocked by {domain}")
         time.sleep(10)
 
     last_scraped[domain] = time.time()
@@ -168,7 +168,7 @@ def get_url_content_using_urllib(url):
             content_type = response.headers.get('Content-Type', '')
             content = response.read()
             if 'application/pdf' in content_type or '.pdf' in url:
-                print(f"Extracting text from PDF {url}")
+                print_misc(f"Extracting text from PDF {url}")
                 content = get_content_from_pdf(content, url)
                 return content
             elif 'text/html' in content_type:
@@ -194,7 +194,7 @@ async def get_url_content_using_browser(url):
 
     domain = urlparse(url).hostname
     if domain in last_scraped and time.time() - last_scraped[domain] < 30:
-        print(f"Sleeping for 10 seconds to avoid being blocked by {domain}")
+        print_misc(f"Sleeping for 10 seconds to avoid being blocked by {domain}")
         time.sleep(10)
     last_scraped[domain] = time.time()
 
@@ -207,7 +207,7 @@ async def get_url_content_using_browser(url):
 
             # If link is a pdf, extract pdf text
             if url.lower().endswith(".pdf"):
-                print(f"Browser: Extracting text from PDF {url}")
+                print_misc(f"Browser: Extracting text from PDF {url}")
                 pdf_bytes = sb.download_file(url)  # Download the PDF file
                 if pdf_bytes:
                     return get_content_from_pdf(pdf_bytes, url)
@@ -216,7 +216,7 @@ async def get_url_content_using_browser(url):
 
             return html
     except Exception as e:
-        print(f"[ERROR] An error occurred in get_url_content_using_browser: {e}")
+        print_misc(f"[ERROR] An error occurred in get_url_content_using_browser: {e}")
         return None
 
 def parse_dois(html, url, author):
@@ -266,7 +266,7 @@ def parse_dois(html, url, author):
                 continue
             # Check html contains author name
             link = get_doi_link(doi)
-            print(link)
+            print_misc(link)
             html = get_url_content(link)
             if author not in html:
                 print_warn(f"Failed to verify DOI: Author not found in HTML of {link}")
@@ -355,7 +355,7 @@ def check_doi_via_redirect(doi, expected_url, expected_html, author, attempts=1)
     
     domain = 'doi.org'
     if domain in last_scraped and time.time() - last_scraped[domain] < 30:
-        print(f"Sleeping for 1 second to avoid being blocked by {domain}")
+        print_misc(f"Sleeping for 1 second to avoid being blocked by {domain}")
         time.sleep(1)
     last_scraped[domain] = time.time()
 
@@ -371,10 +371,10 @@ def check_doi_via_redirect(doi, expected_url, expected_html, author, attempts=1)
         if has_captcha(page_html):
             print_warn(f"Captcha encountered on {doi} attempt {attempts}")
             if attempts > 3:
-                print(f"Failed to verify DOI {doi} against {expected_url}. Returning False.")
+                print_misc(f"Failed to verify DOI {doi} against {expected_url}. Returning False.")
                 return False
             sleep = 60*60*attempts
-            print(f"Sleeping for {sleep} hour")
+            print_misc(f"Sleeping for {sleep} hour")
             print_error("TODO: USE TOR TO BYPASS CAPTCHA???")
             time.sleep(sleep)
             return check_doi_via_redirect(doi, expected_url, expected_html, author, attempts+1)
@@ -387,7 +387,7 @@ def check_doi_via_redirect(doi, expected_url, expected_html, author, attempts=1)
         #    print_warn(f"Verifying DOI: Similar HTML content for DOI {doi} {expected_url}")
         #    return True
     except HTTPError as err:
-        print(f"HTTP error {err.code} for DOI {doi}: {err.reason}")
+        print_misc(f"HTTP error {err.code} for DOI {doi}: {err.reason}")
     return False
 
 def has_captcha(html):
@@ -402,7 +402,7 @@ def get_doi_api(doi):
     
     domain = 'doi.org'
     if domain in last_scraped and time.time() - last_scraped[domain] < 30:
-        print(f"Sleeping for 1 second to avoid being blocked by {domain}")
+        print_misc(f"Sleeping for 1 second to avoid being blocked by {domain}")
         time.sleep(1)
     last_scraped[domain] = time.time()
 
@@ -451,7 +451,7 @@ def check_doi_via_api(doi, expected_url):
     # check end part of doi to see if it's in the new url
     # e.g., 10.1242/jeb.243973 in https://journals.biologists.com/jeb/article/225/22/jeb243973/283144/Escape-response-kinematics-in-two-species-of
     if doi.split("/")[-1] in link or doi.split(".")[-1] in link:
-        print(f"Verifying DOI: End part of DOI {doi} in link {link}")
+        print_misc(f"Verifying DOI: End part of DOI {doi} in link {link}")
         return True
     print_error (f"Failed to verify DOI {doi}: {link} against {expected_url}")
     return False
@@ -471,7 +471,7 @@ def get_doi_short_api(doi):
     
     domain = 'shortdoi.org'
     if domain in last_scraped and time.time() - last_scraped[domain] < 30:
-        print(f"Sleeping for 1 second to avoid being blocked by {domain}")
+        print_misc(f"Sleeping for 1 second to avoid being blocked by {domain}")
         time.sleep(1)
     last_scraped[domain] = time.time()
 

@@ -8,7 +8,7 @@ from scholarly import scholarly
 from journal_impact_factor import load_impact_factor, add_impact_factor
 from doi import get_doi, get_doi_from_title, get_doi_link, get_doi_resolved_link, get_doi_short, get_doi_short_link, are_urls_equal
 from standardise import standardise_authors
-from logger import print_error, print_warn, print_info
+from logger import print_error, print_warn, print_info, print_misc
 
 if not len(sys.argv) == 2:
     print_error("Usage: python main.py scholar_id\nExample: python main.py ynWS968AAAAJ")
@@ -26,8 +26,8 @@ if os.path.exists(os.path.join("cache_scholar", f"{scholar_id}.json")):
         previous_data = json.load(f)
 
 try:
-    print(f"Getting author with ID: {scholar_id}")
-    print("This script will take a while to complete due to the rate limits of the scraping website and APIs used")
+    print_misc(f"Getting author with ID: {scholar_id}")
+    print_misc("This script will take a while to complete due to the rate limits of the scraping website and APIs used")
     author = scholarly.search_author_id(scholar_id)
     if not author or author is None:
         print_error("Author not found")
@@ -39,7 +39,7 @@ try:
     # Process each publication
     for index, pub in enumerate(author["publications"]):
         # Publication number of the publications
-        print(f"Processing publication {index+1}/{len(author['publications'])}: {pub['bib']['title']}")
+        print_misc(f"Processing publication {index+1}/{len(author['publications'])}: {pub['bib']['title']}")
 
         # If already in json file, get data from there but use new Impact Factor.
         if previous_data.get('publications', []) and len(previous_data.get('publications', [])) > index:
@@ -56,7 +56,7 @@ try:
         pub_title = filled_pub.get('bib', {}).get('title', '')
         pub_url = filled_pub.get('pub_url', '')
         journal_name = filled_pub.get('bib', {}).get('journal', '') if filled_pub.get('bib', {}).get('journal', '') != "Null" else ''
-        print(f"Journal name: {journal_name}")
+        print_misc(f"Journal name: {journal_name}")
 
         # Standardise author names
         authors = filled_pub.get('bib', {}).get('author', '')
@@ -72,7 +72,7 @@ try:
             filled_pub['bib']['impact_factor'] = ""
         else:
             # Get DOI
-            print(f"Getting DOI for {pub_url}")
+            print_misc(f"Getting DOI for {pub_url}")
 
             # Get DOI from previous data, if available
             doi = previous_data.get('publications', [])[index].get('doi', '') if previous_data.get('publications', []) else None
@@ -94,9 +94,9 @@ try:
                 doi_link = previous_data.get('publications', [])[index].get('doi_link', '') if previous_data.get('publications', []) else None
                 if not doi_link:
                     doi_link = get_doi_link(doi)
-                    print(f"DOI link: {doi_link}")
+                    print_misc(f"DOI link: {doi_link}")
                     resolved_link = get_doi_resolved_link(doi)
-                    print(f"DOI Resolves to: {resolved_link}")
+                    print_misc(f"DOI Resolves to: {resolved_link}")
                     if not are_urls_equal(pub_url, resolved_link):
                         print_warn(f"Resolved link does not match publication URL:\n{pub_url}\n{resolved_link}")
 
@@ -104,7 +104,7 @@ try:
                 doi_short = previous_data.get('publications', [])[index].get('doi_short', '') if previous_data.get('publications', []) else None
                 if not doi_short:
                     doi_short = get_doi_short(doi)
-                    print(f"Short DOI: {doi_short}")
+                    print_misc(f"Short DOI: {doi_short}")
 
                 # Get doi_short_link from previous data, if available
                 doi_short_link = previous_data.get('publications', [])[index].get('doi_short_link', '') if previous_data.get('publications', []) else None
@@ -142,7 +142,7 @@ try:
         with open(f"{scholar_id}.json", "w") as f:
             json.dump(author, f, indent=4)
         
-        print("Sleeping for 1 second... Being polite with the rate of requests to Google Scholar.")
+        print_misc("Sleeping for 1 second... Being polite with the rate of requests to Google Scholar.")
         time.sleep(1)
 
     # Update the author data with processed publications
