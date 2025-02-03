@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 load_dotenv()
 
-NEWS_API_KEY = os.getenv("NEWS_API_KEY")
+NEWS_API_ORG_KEY = os.getenv("NEWS_API_ORG_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 GOOGLE_CX_ID = os.getenv("GOOGLE_CX_ID")
 
@@ -49,7 +49,7 @@ def main(SEARCH_TERMS):
     
     # Fetch articles from NewsAPI
     print("Fetching news articles...")
-    news_articles = fetch_news_api(SEARCH_TERMS, NEWS_API_KEY)
+    news_articles = fetch_news_api(SEARCH_TERMS, NEWS_API_ORG_KEY)
     portfolio_data["news_articles"].extend(news_articles)
     time.sleep(DELAY)
 

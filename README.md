@@ -4,8 +4,9 @@ This project uses a home server cronjob to scrape [Google Scholar](https://schol
 
 The JSON can then be used, for example, by uploading the data to a publicly accessible server via Secure Copy (SCP) or rsync, which serves the JSON data via a Flask application.
 
-[Meltwater](https://www.meltwater.com/) is the news gathering tool used by some universities.
+[Meltwater](https://www.meltwater.com/) is the news gathering tool used by some universities. See also Isentia Medaiportal.
 See also [Zotera](https://www.zotero.org/), an [open source citation manager](https://github.com/zotero/zotero).
+
 
 ## Installation
 
