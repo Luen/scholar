@@ -1,11 +1,20 @@
+version: '3.8'
+
 services:
   scholarly:
     build: .
     container_name: scholarly
+    env_file: .env
     environment:
       - PYTHONUNBUFFERED=1
+      - NEWS_API_ORG_KEY=${NEWS_API_ORG_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_CX_ID=${GOOGLE_CX_ID}
+      - THE_GUARDIAN_API_KEY=${THE_GUARDIAN_API_KEY}
     ports:
       - "8000:5000"
     volumes:
-      - .:/app
-    command: python serve.py
+      - ./scholar_data:/app/scholar_data
+      - ./html_cache:/app/html_cache
+      - ./google-credentials.json:/app/google-credentials.json:ro
+    restart: unless-stopped
