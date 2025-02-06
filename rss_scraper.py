@@ -558,26 +558,18 @@ def fetch_all_news() -> List[MediaItem]:
     unique_articles.sort(key=lambda x: x['date'], reverse=True)
     return unique_articles
 
-def main():
-    """Main function to fetch all news and save to JSON."""
+def get_rss_data(scholar_name):
+    """Function to fetch all RSS data for a scholar that can be used by main.py"""
     articles = fetch_all_news()
-    
-    # Load existing portfolio data
-    portfolio_file = f"{SCHOLAR_NAME.replace(' ', '_')}_portfolio.json"
-    if os.path.exists(portfolio_file):
-        with open(portfolio_file, 'r') as f:
-            portfolio_data = json.load(f)
-    else:
-        portfolio_data = {}
-        
-    # Update media section
-    portfolio_data['media'] = articles
-    
-    # Save updated portfolio data
-    with open(portfolio_file, 'w') as f:
-        json.dump(portfolio_data, f, indent=4)
-        
-    print(f"Saved {len(articles)} media items to {portfolio_file}")
+    return {'media': articles}
 
 if __name__ == "__main__":
-    main() 
+    # For standalone testing
+    SCHOLAR_NAME = "Professor Dr Jodie Rummer"
+    rss_data = get_rss_data(SCHOLAR_NAME)
+    
+    # Save to file for testing
+    test_file = os.path.join("scholar_data", f"{SCHOLAR_NAME.replace(' ', '_')}_rss.json")
+    with open(test_file, "w") as f:
+        json.dump(rss_data, f, indent=4)
+    print(f"Saved {len(rss_data['media'])} media items to {test_file}") 
