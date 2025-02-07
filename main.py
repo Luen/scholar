@@ -82,10 +82,9 @@ try:
             doi = previous_data.get('publications', [])[index].get('doi', '') if previous_data.get('publications', []) else None
 
             # e.g., https://scholar.google.com/scholar?cluster=4186906934658759747&hl=en&oi=scholarr
-            #host = urlparse(url).hostname
-            #if host and host.endswith("scholar.google.com"):
             if not doi:
-                if "scholar.google.com" in pub_url and pub_title:
+                host = urlparse(pub_url).hostname
+                if host and host == "scholar.google.com" and pub_title:
                     doi = get_doi_from_title(pub_title, author['name'].split()[-1])
                 else:
                     doi = get_doi(pub_url, author['name'].split()[-1])
