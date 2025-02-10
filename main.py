@@ -9,8 +9,8 @@ from journal_impact_factor import load_impact_factor, add_impact_factor
 from doi import get_doi, get_doi_from_title, get_doi_link, get_doi_resolved_link, get_doi_short, get_doi_short_link, are_urls_equal
 from standardise import standardise_authors
 from logger import print_error, print_warn, print_info, print_misc
-from news_scraper import get_news_data
-from rss_scraper import get_rss_data
+from old_news_scraper import get_news_data
+from news_scraper import get_rss_data
 
 if not len(sys.argv) == 2:
     print_error("Usage: python main.py scholar_id\nExample: python main.py ynWS968AAAAJ")
