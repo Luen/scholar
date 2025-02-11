@@ -7,7 +7,6 @@ The JSON can then be used, for example, by uploading the data to a publicly acce
 [Meltwater](https://www.meltwater.com/) is the news gathering tool used by some universities. See also Isentia Medaiportal.
 See also [Zotera](https://www.zotero.org/), an [open source citation manager](https://github.com/zotero/zotero).
 
-
 ## Installation
 
 ### Prerequisites

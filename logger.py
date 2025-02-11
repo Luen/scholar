@@ -24,7 +24,8 @@ def print_info(message):
     print(formatted_message)
     log_to_file("INFO", message)
 
-def print_misc(message):
+def print_misc(*args):
+    message = ' '.join(str(arg) for arg in args)
     formatted_message = colored(255, 255, 255, message)
     print(formatted_message)
     log_to_file("MISC", message)

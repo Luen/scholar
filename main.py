@@ -1,9 +1,9 @@
 # Generate a JSON file with the author's publications, including DOI and Impact Factor
-
 import sys
 import time
 import json
 import os
+from urllib.parse import urlparse
 from scholarly import scholarly
 from journal_impact_factor import load_impact_factor, add_impact_factor
 from doi import get_doi, get_doi_from_title, get_doi_link, get_doi_resolved_link, get_doi_short, get_doi_short_link, are_urls_equal
@@ -20,9 +20,12 @@ scholar_id = sys.argv[1]
 journal_impact_factor_dic = load_impact_factor()
 print_info(f"Loaded {len(journal_impact_factor_dic)} impact factors from Google Sheet.")
 
+if not os.path.exists("scholar_data"):
+    os.makedirs("scholar_data")
+file_path = os.path.join("scholar_data", f"{scholar_id}.json")
+
 # Load previous data, if available
 previous_data = {}
-file_path = os.path.join("scholar_data", f"{scholar_id}.json")
 if os.path.exists(file_path):
     with open(file_path, "r") as f:
         previous_data = json.load(f)
@@ -37,6 +40,22 @@ try:
         sys.exit(1) # Exit if no author found
 
     author = scholarly.fill(author)
+    
+    # Fill coauthors data
+    print_misc("Fetching coauthors data...")
+    if 'coauthors' in author:
+        filled_coauthors = []
+        for coauthor in author['coauthors']:
+            try:
+                print_misc(f"Fetching data for coauthor: {coauthor.get('name', 'Unknown')}")
+                filled_coauthor = scholarly.fill(coauthor)
+                filled_coauthors.append(filled_coauthor)
+                time.sleep(2)  # Be nice to Google Scholar
+            except Exception as e:
+                print_warn(f"Error fetching data for coauthor {coauthor.get('name', 'Unknown')}: {str(e)}")
+                filled_coauthors.append(coauthor)  # Add unfilled data if there's an error
+        author['coauthors'] = filled_coauthors
+    
     filled_publications = []
 
     # Process each publication
@@ -140,8 +159,7 @@ try:
         # Add to list of processed publications
         filled_publications.append(filled_pub)
 
-        # Save progress
-        with open(f"{scholar_id}.json", "w") as f:
+        with open(file_path, "w") as f:
             json.dump(author, f, indent=4)
         
         print_misc("Sleeping for 1 second... Being polite with the rate of requests to Google Scholar.")
@@ -158,7 +176,7 @@ try:
     # Write author to file in JSON format
     with open(file_path, "w") as f:
         json.dump(author, f, indent=4)
-    print_info(f"DONE. Author data written to {scholar_id}.json")
+    print_info(f"DONE. Author data written to {file_path}")
 
 except AttributeError as e:
     print_error(f"AttributeError: {e}")

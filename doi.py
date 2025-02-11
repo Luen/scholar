@@ -78,40 +78,41 @@ def get_url_content(url):
     return html
 
 def get_doi(url, author):
-    # Extract DOI URL e.g., https://onlinelibrary.wiley.com/doi/abs/10.1111/gcb.12455 which has the 10.1111/gcb.12455 (https://doi.org/10.1111/gcb.12455)
-    doi_in_url = extract_doi_from_url(url)
-    if doi_in_url:
-        return doi_in_url
+    """Get DOI from URL or page content."""
+    # First try to extract DOI from URL
+    doi = extract_doi_from_url(url)
+    if doi:
+        print_info(f"Found DOI in URL: {doi}")
+        return doi
     
-    slug = url.split('/')[-1]
-
+    # Then try to get it from page content
     html = get_url_content(url)
-
-    dois_in_metadata = extract_doi_metadata(url)
-    if dois_in_metadata and len(dois_in_metadata) == 1: # If there is only one DOI, it is likely to be correct
-        return dois_in_metadata[0]
-
+    if not html:
+        return None
+    
+    # Try to get DOI from metadata
+    dois_in_metadata = extract_doi_metadata(html)
+    if dois_in_metadata:
+        if len(dois_in_metadata) == 1:
+            print_info(f"Found single DOI in metadata: {dois_in_metadata[0]}")
+            return dois_in_metadata[0]
+        
+        # If multiple DOIs found, try to find the most relevant one
+        for doi in dois_in_metadata:
+            if check_doi_via_api(doi, url):
+                print_info(f"Verified DOI via API: {doi}")
+                return doi
+    
     # Parse the page for DOIs
     dois_parsed = parse_dois(html, url, author)
-    dois = dois_in_metadata.extend(dois_parsed)
-    if not dois:
-        print_warn(f"No DOIs found in metadata or parsed HTML for {url}")
-        return None
-    if len(dois) == 1: # If there is only one DOI, it is likely to be correct
-        return dois[0]
-    for doi in dois: # If there are multiple DOIs on the page, check each one
-        print_misc("Multiple DOIs:", slug, doi)
-        # If part of slug in part of doi, then it is likely the correct one
-        if slug in doi: # If the DOI contains the URL slug, it is likely the correct one e.g, https://www.nature.com/articles/nclimate2195 which has nclimate2195 (https://doi.org/10.1038/nclimate2195)
-            return doi
-        if check_doi_via_api(doi, url): # URL the DOI api to verify the URL
-            return doi
-        if check_doi_via_redirect(doi, url, html, author): # Check if the DOI redirects to the URL
-            print_warn(f"Verified DOI via redirect: {doi} goes to {url}")
-            return doi
-    # Return the first DOI if none of the above conditions are met
-    #return dois[0]
+    if dois_parsed:
+        for doi in dois_parsed:
+            if check_doi_via_api(doi, url):
+                print_info(f"Verified DOI via API: {doi}")
+                return doi
     
+    print_warn(f"No verified DOI found for {url}")
+    return None
 
 def get_doi_from_title(pub_title, author):
     # Google Search the publication's title to find what is likely the publication's url and then the DOI from that page
@@ -332,30 +333,24 @@ def are_urls_equal(url1, url2):
     return False
 
 def extract_doi_from_url(url):
-    # Regex pattern to find DOI in URL
-    # DOI starts with 10 and can contain digits or dots, followed by a slash and a character sequence
-    #doi_pattern = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+'
-    # https://journals.biologists.com/jeb/article-pdf/doi/10.1242/jeb.243973/2170187/jeb243973.pdf
-    # https://www.frontiersin.org/articles/10.3389/fmars.2021.724913/full?trk=public_post_comment-text
-    # doi_pattern = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+(?![.][a-z]+)'
-    doi_pattern = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+?(?=/|$|\.pdf)'
-    match = re.search(doi_pattern, url, re.IGNORECASE)
-    if match and check_doi_via_api(match.group(), url): # Check if DOI is valid e.g., 10.1242/jeb.243973
-        return match.group()
+    """Extract DOI from URL."""
+    # Common DOI patterns in URLs
+    patterns = [
+        r'10\.\d{4,9}/[-._;()/:A-Z0-9]+(?![.][a-z]+)',  # Basic DOI pattern
+        r'doi/(?:abs/|full/|pdf/)?([^?#]+)',  # DOI in path
+        r'doi:([^?#/]+/[^?#/]+)'  # DOI with prefix
+    ]
     
-    # https://academic.oup.com/conphys/article-pdf/doi/10.1093/conphys/cox003/17644168/cox003.pdf
-    # try adding one more slash to get 10.1093/conphys/cox003
-    doi_pattern_extended = r'10\.\d{4,9}/[-._;():A-Z0-9]+/[-._;():A-Z0-9]+'
-    match = re.search(doi_pattern_extended, url, re.IGNORECASE)
-    if match and check_doi_via_api(match.group(), url):
-        return match.group()
+    for pattern in patterns:
+        matches = re.findall(pattern, url, re.IGNORECASE)
+        if matches:
+            # Take the first match that looks like a valid DOI
+            for match in matches:
+                if isinstance(match, tuple):
+                    match = match[0]
+                if re.match(r'10\.\d{4,9}/[-._;()/:A-Z0-9]+', match):
+                    return match
     
-    doi_pattern_full = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+'
-    #doi_pattern_full = r'10\.\d{4,9}/[-._;()/:A-Z0-9]+(?=[.][a-z]+)'
-    match = re.search(doi_pattern_full, url, re.IGNORECASE)
-    if match and check_doi_via_api(match.group(), url):
-        return match.group()
-
     return None
 
 @lru_cache(maxsize=1000)
@@ -452,20 +447,20 @@ def get_doi_resolved_link(doi):
 
 # Verify the DOI against the URL
 def check_doi_via_api(doi, expected_url):
-    if not doi or not expected_url:
-        return None
-    link = get_doi_resolved_link(doi)
-    if not link:
-        return None
-    if are_urls_equal(link, expected_url):
-        return True
-    # check end part of doi to see if it's in the new url
-    # e.g., 10.1242/jeb.243973 in https://journals.biologists.com/jeb/article/225/22/jeb243973/283144/Escape-response-kinematics-in-two-species-of
-    if doi.split("/")[-1] in link or doi.split(".")[-1] in link:
-        print_misc(f"Verifying DOI: End part of DOI {doi} in link {link}")
-        return True
-    print_error (f"Failed to verify DOI {doi}: {link} against {expected_url}")
-    return False
+    """Verify DOI points to expected URL using CrossRef API."""
+    try:
+        api_data = get_doi_api(doi)
+        if not api_data:
+            return False
+            
+        resolved_url = api_data.get('URL')
+        if not resolved_url:
+            return False
+            
+        return are_urls_equal(resolved_url, expected_url)
+    except Exception as e:
+        print_warn(f"Error checking DOI via API: {str(e)}")
+        return False
 
 def get_doi_link(doi):
     if not doi:

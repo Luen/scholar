@@ -1,8 +1,13 @@
 from logger import print_error, print_warn, print_info
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import os
 
-# Define the scope and authenticate
+if not os.path.exists("./google-credentials.json"):
+    print_error("google-credentials.json file not found")
+    exit(1)
+
+# Get the JSON file from Fetch GSheet project -> Credentials -> Service Accounts link -> Keys -> Create new key -> Download JSON
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("./google-credentials.json", scope)
 client = gspread.authorize(creds)
