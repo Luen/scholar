@@ -31,13 +31,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application
 COPY . .
 
-# Create necessary directories with correct permissions
-RUN mkdir -p /app/scholar_data /app/html_cache /var/log \
+# Create script, set up directories and cron
+RUN echo '#!/bin/bash\nsudo service cron start\npython serve.py' > /app/start.sh \
+    && mkdir -p /app/scholar_data /app/html_cache /var/log \
     && touch /var/log/cron.log \
-    && chown -R app_user:app_user /app /var/log/cron.log
-
-# Add cron job to run main.py every two weeks
-RUN echo "0 0 */14 * * cd /app && python main.py ynWS968AAAAJ >> /var/log/cron.log 2>&1" > /etc/cron.d/run_main \
+    && chmod +x /app/start.sh \
+    && chown -R app_user:app_user /app /var/log/cron.log \
+    && echo "0 0 */14 * * cd /app && python main.py ynWS968AAAAJ >> /var/log/cron.log 2>&1" > /etc/cron.d/run_main \
     && chmod 0644 /etc/cron.d/run_main \
     && crontab -u app_user /etc/cron.d/run_main
 
@@ -47,14 +47,5 @@ USER app_user
 # Expose the port for Flask application
 EXPOSE 5000
 
-# Create a script to run both cron and Flask
-COPY <<EOF /app/start.sh
-#!/bin/bash
-sudo service cron start
-python serve.py
-EOF
-
-RUN chmod +x /app/start.sh
-
-# Start both cron and Flask
-CMD ["/app/start.sh"]
+# Start the Flask server with proper shell execution
+CMD ["/bin/bash", "/app/start.sh"]
