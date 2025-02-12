@@ -6,6 +6,14 @@ RUN apt-get update && apt-get install -y \
     cron \
     chromium \
     chromium-driver \
+    libgconf-2-4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libgdk-pixbuf2.0-0 \
+    libgtk-3-0 \
+    libnss3 \
+    libxss1 \
+    libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user
@@ -19,9 +27,6 @@ COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Install playwright browsers
-RUN playwright install chromium
 
 # Copy the rest of the application
 COPY . .

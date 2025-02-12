@@ -14,5 +14,8 @@ services:
     volumes:
       - ./scholar_data:/app/scholar_data
       - ./html_cache:/app/html_cache
+      - ./cache:/app/cache
+      - ./downloaded_files:/app/downloaded_files
       - ./google-credentials.json:/app/google-credentials.json:ro
+      - ./logfile.txt:/app/logfile.txt
     restart: unless-stopped
