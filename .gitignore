@@ -157,4 +157,4 @@ scholar_data/*.json
 html_cache/
 downloaded_files/
 cache/
-logfile.txt
+app.txt

@@ -27,7 +27,6 @@ See also [Zotera](https://www.zotero.org/), an [open source citation manager](ht
     python -m venv scholar
     source scholar/bin/activate
     pip install -r requirements.txt
-    playwright install
     ```
 
 4. Test run.
