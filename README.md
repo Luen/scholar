@@ -52,6 +52,19 @@ Then start the services:
 
 `docker-compose up -d`
 
+Wait for containers to be ready (check status with `docker compose ps`). Then to manually run the script:
+
+```bash
+# First check if containers are ready
+docker compose ps
+
+# If containers are running, execute the script
+docker compose exec cron python main.py ynWS968AAAAJ
+
+# If you get a "container is restarting" error, check logs
+docker compose logs web
+```
+
 ## Testing
 
 Install pytest and run it using the command `pytest`.
