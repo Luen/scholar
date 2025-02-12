@@ -1,11 +1,14 @@
 # Build from base image
 FROM scholar-base:latest
 
-# Install cron
-RUN apt-get update && apt-get install -y cron \
+# Install cron and sudo
+RUN apt-get update && apt-get install -y \
+    cron \
+    sudo \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /var/run/crond \
-    && chown -R app_user:app_user /var/run/crond
+    && chown -R app_user:app_user /var/run/crond \
+    && echo "app_user ALL=(ALL) NOPASSWD: /usr/sbin/cron" >> /etc/sudoers
 
 # Copy application code
 COPY --chown=app_user:app_user . .
@@ -18,7 +21,7 @@ RUN touch /var/log/app.log \
     && crontab -u app_user /etc/cron.d/run_main
 
 # Create a wrapper script to run cron
-RUN echo '#!/bin/bash\nsudo -E cron -f' > /app/start-cron.sh \
+RUN echo '#!/bin/bash\nsudo /usr/sbin/cron -f' > /app/start-cron.sh \
     && chmod +x /app/start-cron.sh
 
 # Switch to non-root user
