@@ -9,6 +9,8 @@ See also [Zotera](https://www.zotero.org/), an [open source citation manager](ht
 
 altmetrics
 
+`python -m venv scholar && source scholar/bin/activate`
+
 ## Installation
 
 ### Prerequisites
@@ -35,12 +37,6 @@ altmetrics
 
     ```bash
     python main.py ynWS968AAAAJ
-    ```
-
-5. Set up cronjob.
-
-    ```bash
-    0 * * * * /path/to/your_bash_script.sh
     ```
 
 ## Docker
