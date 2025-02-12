@@ -42,6 +42,16 @@ See also [Zotera](https://www.zotero.org/), an [open source citation manager](ht
     0 * * * * /path/to/your_bash_script.sh
     ```
 
+## Docker
+
+First build the base image:
+
+`docker build -t scholar-base:latest -f Dockerfile.base .`
+
+Then start the services:
+
+`docker-compose up -d`
+
 ## Testing
 
 Install pytest and run it using the command `pytest`.
