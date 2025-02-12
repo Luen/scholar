@@ -1,7 +1,9 @@
 services:
-  scholarly:
-    build: .
-    container_name: scholarly
+  web:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: scholar_web
     env_file: .env
     environment:
       - PYTHONUNBUFFERED=1
@@ -12,10 +14,53 @@ services:
     ports:
       - "8000:5000"
     volumes:
-      - ./scholar_data:/app/scholar_data
-      - ./html_cache:/app/html_cache
-      - ./cache:/app/cache
-      - ./downloaded_files:/app/downloaded_files
+      - scholar_data:/app/scholar_data
+      - html_cache:/app/html_cache
+      - cache:/app/cache
+      - downloaded_files:/app/downloaded_files
       - ./google-credentials.json:/app/google-credentials.json:ro
-      - ./logfile.txt:/app/logfile.txt
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  cron:
+    build: 
+      context: .
+      dockerfile: Dockerfile.cron
+    container_name: scholar_cron
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - NEWS_API_ORG_KEY=${NEWS_API_ORG_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_CX_ID=${GOOGLE_CX_ID}
+      - THE_GUARDIAN_API_KEY=${THE_GUARDIAN_API_KEY}
+    volumes:
+      - scholar_data:/app/scholar_data
+      - html_cache:/app/html_cache
+      - cache:/app/cache
+      - downloaded_files:/app/downloaded_files
+      - ./google-credentials.json:/app/google-credentials.json:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+
+volumes:
+  scholar_data:
+  html_cache:
+  cache:
+  downloaded_files:

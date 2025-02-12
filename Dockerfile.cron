@@ -1,0 +1,22 @@
+# Build from base image
+FROM scholar-base:latest
+
+# Install cron
+RUN apt-get update && apt-get install -y cron \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy application code
+COPY --chown=app_user:app_user . .
+
+# Setup cron job
+RUN touch /var/log/app.log \
+    && chown app_user:app_user /var/log/app.log \
+    && echo "0 0 */14 * * cd /app && python main.py ynWS968AAAAJ >> /var/log/app.log 2>&1" > /etc/cron.d/run_main \
+    && chmod 0644 /etc/cron.d/run_main \
+    && crontab -u app_user /etc/cron.d/run_main
+
+# Switch to non-root user
+USER app_user
+
+# Start cron in foreground
+CMD ["cron", "-f"] 
