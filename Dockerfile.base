@@ -3,6 +3,7 @@ FROM python:3.10.13-slim-bullseye AS base
 
 # Install only necessary system dependencies
 RUN apt-get update && apt-get install -y \
+    curl \
     chromium \
     chromium-driver \
     libgconf-2-4 \
