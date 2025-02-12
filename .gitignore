@@ -158,3 +158,4 @@ html_cache/
 downloaded_files/
 cache/
 app.txt
+.DS_Store
