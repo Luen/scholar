@@ -135,6 +135,10 @@ def get_doi_from_title(pub_title, author):
 
 def get_content_from_pdf(pdf_bytes, url):
     try:
+        # Handle both string and bytes input
+        if isinstance(pdf_bytes, str):
+            pdf_bytes = pdf_bytes.encode('utf-8')
+        
         pdf_file = io.BytesIO(pdf_bytes)
         with pdfplumber.open(pdf_file) as pdf:
             # get page from url hash - e.g., https://repository.library.noaa.gov/view/noaa/42440/noaa_42440_DS1.pdf#page=124
@@ -214,12 +218,16 @@ async def get_url_content_using_browser(url):
             # If link is a pdf, extract pdf text
             if url.lower().endswith(".pdf"):
                 print_misc(f"Browser: Extracting text from PDF {url}")
-                pdf_bytes = sb.download_file(url)  # Download the PDF file
-                if pdf_bytes:
-                    return get_content_from_pdf(pdf_bytes, url)
+                try:
+                    response = urllib.request.urlopen(url)
+                    pdf_bytes = response.read()
+                    if pdf_bytes:
+                        return get_content_from_pdf(pdf_bytes, url)
+                except Exception as e:
+                    print_error(f"Error downloading PDF: {e}")
+                    return None
 
             html = sb.get_page_source()
-
             return html
     except Exception as e:
         print_misc(f"[ERROR] An error occurred in get_url_content_using_browser: {e}")
