@@ -99,6 +99,12 @@ try:
             # Get DOI from previous data, if available
             doi = previous_data.get('publications', [])[index].get('doi', '') if previous_data.get('publications', []) else None
 
+            # Initialize variables
+            doi_link = None
+            doi_short = None
+            doi_short_link = None
+            resolved_link = None
+
             # e.g., https://scholar.google.com/scholar?cluster=4186906934658759747&hl=en&oi=scholarr
             if not doi:
                 host = urlparse(pub_url).hostname
