@@ -1,5 +1,6 @@
 {
     "cSpell.words": [
         "sciencedirect"
-    ]
+    ],
+    "snyk.advanced.autoSelectOrganization": true
 }

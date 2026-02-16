@@ -1,0 +1,28 @@
+[project]
+name = "scholar"
+description = "Google Scholar scraper and API"
+readme = "README.md"
+requires-python = ">=3.9"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+exclude = [".venv", ".git", "__pycache__", "cache"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = [
+    "E501",  # line too long (fix incrementally)
+    "E722",  # bare except
+    "UP035",  # typing.Dict/List/Set deprecated
+    "UP006",  # non-pep585 typing
+]
+
+[tool.ruff.format]
+quote-style = "double"

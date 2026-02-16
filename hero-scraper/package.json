@@ -1,0 +1,11 @@
+{
+  "name": "hero-scraper",
+  "version": "1.0.0",
+  "description": "HTTP API wrapper for Ulixee Hero web scraper",
+  "main": "server.js",
+  "type": "module",
+  "dependencies": {
+    "@ulixee/hero": "^2.0.0-alpha.34",
+    "express": "^4.21.0"
+  }
+}

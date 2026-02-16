@@ -41,13 +41,37 @@ altmetrics
 
 ## Docker
 
-First build the base image:
+The stack includes:
 
-`docker build -t scholar-base:latest -f Dockerfile.base .`
+- **hero** – [Ulixee Hero](https://github.com/ulixee/hero) Cloud (browser automation for scraping)
+- **hero-scraper** – HTTP API wrapper that sends URLs to Hero and returns HTML
+- **web** – Flask API serving scholar data
+- **cron** – Runs the main scraper on a schedule
 
-Then start the services:
+Build the base image:
 
-`docker-compose up -d`
+```bash
+docker build -t scholar-base:latest -f Dockerfile.base .
+```
+
+Start all services:
+
+```bash
+docker compose up -d
+```
+
+For browser-based scraping (DOIs, etc.), the hero-scraper service must be running. Set `HERO_SCRAPER_URL` (default: `http://hero-scraper:3000` in Docker, `http://localhost:3000` locally) to point at it.
+
+### Caching
+
+HTTP responses are cached with [requests-cache](https://requests-cache.readthedocs.io/) in `cache/` (SQLite). This includes:
+
+- Scholarly (Google Scholar) requests
+- DOI API requests (doi.org, shortdoi.org)
+- Hero scraper (browser-fetched HTML)
+- Web page fetches for DOI extraction
+
+Set `CACHE_DIR` to change the cache location; `CACHE_EXPIRE_SECONDS` (default: 30 days) to control expiry.
 
 Wait for containers to be ready (check status with `docker compose ps`). Then to manually run the script:
 
@@ -62,26 +86,56 @@ docker compose exec cron python main.py ynWS968AAAAJ
 docker compose logs web
 ```
 
-## Testing
+## Development
 
-Install pytest and run it using the command `pytest`.
+### Linting and formatting
 
-## Starting the flask app
+This project uses [Ruff](https://docs.astral.sh/ruff/) for linting and formatting. Run after code changes:
 
-Navigate to the project directory and run the Flask application:
-`python ./serve.py`
+```bash
+ruff check . --fix && ruff format .
+```
 
-### Index Welcome Message
+### Testing
 
-URL: /
-Method: GET
-Description: Displays a welcome message in plain text.
-Example: [/](http://127.0.0.1:5000/)
+```bash
+pip install -r requirements.txt
+pytest tests/ -v
+```
 
-### Get Author Id
+Tests marked `integration` require network access. Tests that need `google-credentials.json` or the Hero scraper will skip when unavailable. Run lint and format before committing:
 
-URL: /author_id
-Method: GET
-Description: Searches for authors by id.
-Parameter: id
-Example: [/ynWS968AAAAJ](http://127.0.0.1:5000/ynWS968AAAAJ)
+```bash
+ruff check . && ruff format --check .
+```
+
+## Starting the Flask server
+
+Navigate to the project directory and run:
+
+```bash
+python server.py
+```
+
+Or with Docker:
+
+```bash
+docker compose up web -d
+```
+
+The API is available at `http://localhost:8000` (Docker maps 8000→5000).
+
+### API Endpoints
+
+| URL | Method | Description |
+|-----|--------|-------------|
+| `/` | GET | Welcome message |
+| `/health` | GET | Health check |
+| `/scholars` | GET | List available scholar IDs |
+| `/scholar/<id>` | GET | Get scholar data by ID (e.g. `/scholar/ynWS968AAAAJ`) |
+
+### Environment variables
+
+- `FLASK_HOST` – Bind host (default: `0.0.0.0`)
+- `FLASK_PORT` – Bind port (default: `5000`)
+- `SCHOLAR_DATA_DIR` – Path to scholar JSON files (default: `scholar_data`)

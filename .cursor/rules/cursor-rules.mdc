@@ -1,0 +1,31 @@
+---
+description: Update and add Cursor rules as the project evolves
+alwaysApply: true
+---
+
+# Cursor Rules Maintenance
+
+## Proactive Rule Updates
+
+- **Add new rules** when recurring patterns, conventions, or pitfalls emerge
+- **Update existing rules** when project standards or tooling change
+- **Remove or merge rules** that become redundant or conflicting
+
+## When to Add or Update Rules
+
+- New tools (linters, formatters, test runners) adopted
+- Team or project conventions established
+- Common mistakes or fixes identified
+- Documentation or workflow changes that affect AI assistance
+
+## Rule Location
+
+Rules live in `.cursor/rules/` as `.mdc` files with YAML frontmatter.
+
+## Process
+
+1. Identify a pattern or standard worth encoding
+2. Create or edit a rule in `.cursor/rules/`
+3. Use `alwaysApply: true` for project-wide rules
+4. Use `globs: **/*.py` (etc.) for file-specific rules
+5. Keep each rule focused and under ~50 lines

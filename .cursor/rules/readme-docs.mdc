@@ -1,0 +1,25 @@
+---
+description: Keep README.md up to date as project documentation
+alwaysApply: true
+---
+
+# README as Documentation
+
+## Importance
+
+The README is the primary project documentation. Keep it accurate and current.
+
+## When to Update
+
+- **New features or scripts** — Document usage, options, and examples
+- **Changed setup** — Update installation steps, env vars, or prerequisites
+- **API changes** — Update endpoint docs, parameters, and examples
+- **Dependency changes** — Update requirements list and install instructions
+- **Docker/run changes** — Update commands and workflow
+
+## Checklist
+
+- Installation and setup reflect current state
+- Examples use valid, working commands
+- New environment variables documented (e.g. in .env.template)
+- Broken or outdated sections removed or revised

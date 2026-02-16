@@ -1,0 +1,31 @@
+---
+description: Run Ruff linter and formatter after every code change
+alwaysApply: true
+---
+
+# Ruff Linter and Formatter
+
+## Mandatory Post-Change Step
+
+**After every edit to Python files**, run Ruff to lint and format:
+
+```bash
+ruff check . --fix && ruff format .
+```
+
+Or from project root:
+```bash
+python -m ruff check . --fix && python -m ruff format .
+```
+
+## When to Run
+
+- After adding, modifying, or deleting Python code
+- Before considering a task complete
+- Fix any issues Ruff reports before finishing
+
+## Commands
+
+- `ruff check .` — Lint (add `--fix` to auto-fix where possible)
+- `ruff format .` — Format code to project style
+- `ruff check . --fix && ruff format .` — Lint with fixes, then format (use this)

@@ -25,13 +25,11 @@ WORKDIR /app
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Fix seleniumbase permissions
-RUN mkdir -p /usr/local/lib/python3.10/site-packages/seleniumbase/drivers \
-    && chmod -R 777 /usr/local/lib/python3.10/site-packages/seleniumbase/drivers
+# Upgrade pip and install dependencies with verbosity
+RUN python -m pip install --upgrade pip && \
+    pip install --no-cache-dir -v -r requirements.txt && \
+    pip list
 
 # Create necessary directories
-RUN mkdir -p /app/scholar_data /app/html_cache /var/log \
+RUN mkdir -p /app/scholar_data /app/cache /var/log \
     && chown -R app_user:app_user /app /var/log 

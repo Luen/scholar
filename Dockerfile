@@ -11,4 +11,4 @@ USER app_user
 EXPOSE 5000
 
 # Start the Flask server
-CMD ["python", "serve.py"]
+CMD ["python", "server.py"]

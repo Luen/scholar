@@ -1,0 +1,27 @@
+---
+description: Code quality, best practices, and DRY principles
+alwaysApply: true
+---
+
+# Code Quality and Best Practices
+
+## DRY (Don't Repeat Yourself)
+
+- Extract repeated logic into reusable functions or modules
+- If the same block appears 2+ times, refactor into a shared helper
+- Prefer composition over copy-paste
+
+## Best Practices
+
+- **Functions**: Keep them focused; one responsibility per function
+- **Naming**: Use clear, descriptive names (`get_doi_from_url` not `fetch`)
+- **Error handling**: Handle exceptions explicitly; log and re-raise or return meaningful values
+- **Type hints**: Add type annotations to function signatures where helpful
+- **Imports**: Remove unused imports; avoid duplicates; group stdlib, third-party, local
+- **Comments**: Explain *why*, not *what*; keep docstrings for public functions
+
+## Python Conventions
+
+- Follow PEP 8 (enforced by Ruff)
+- Use `snake_case` for functions/variables, `PascalCase` for classes
+- Prefer pathlib over os.path for file operations where practical

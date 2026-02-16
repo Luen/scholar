@@ -1,7 +1,9 @@
-from logger import print_error, print_warn, print_info
+import os
+
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import os
+
+from .logger import print_error
 
 if not os.path.exists("./google-credentials.json"):
     print_error("google-credentials.json file not found")
@@ -13,15 +15,18 @@ creds = ServiceAccountCredentials.from_json_keyfile_name("./google-credentials.j
 client = gspread.authorize(creds)
 
 # Open the Google Sheet by URL
-sheet_url = "https://docs.google.com/spreadsheets/d/1lP75APkxXAgT8aobV4UjTR51BpX9Ee0wgYA7tTd-zrM/edit?gid=0"
+sheet_url = (
+    "https://docs.google.com/spreadsheets/d/1lP75APkxXAgT8aobV4UjTR51BpX9Ee0wgYA7tTd-zrM/edit?gid=0"
+)
 sheet = client.open_by_url(sheet_url).sheet1
+
 
 def load_impact_factor():
     """
     Load the impact factor data from the Google Sheet and return it as a dictionary with lowercase keys.
     """
-    journal_names = sheet.col_values(1)[1:] # Column A (Journal names), excluding the header
-    impact_factors = sheet.col_values(2)[1:] # Column B (Impact factors), excluding the header
+    journal_names = sheet.col_values(1)[1:]  # Column A (Journal names), excluding the header
+    impact_factors = sheet.col_values(2)[1:]  # Column B (Impact factors), excluding the header
 
     # Extend lists to match length
     max_length = max(len(journal_names), len(impact_factors))
@@ -29,9 +34,14 @@ def load_impact_factor():
     impact_factors.extend([None] * (max_length - len(impact_factors)))
 
     # Create a dictionary with lowercase journal names as keys
-    impact_factor_data = {journal_name.lower(): impact_factor for journal_name, impact_factor in zip(journal_names, impact_factors) if journal_name}
+    impact_factor_data = {
+        journal_name.lower(): impact_factor
+        for journal_name, impact_factor in zip(journal_names, impact_factors)
+        if journal_name
+    }
 
     return impact_factor_data
+
 
 def add_impact_factor(journal_name, impact_factor):
     """
