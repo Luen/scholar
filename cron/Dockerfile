@@ -30,4 +30,4 @@ RUN echo '#!/bin/bash\nsudo /usr/sbin/cron -f' > /app/start-cron.sh \
 USER app_user
 
 # Start cron in foreground using the wrapper
-CMD ["/app/start-cron.sh"] 
+CMD ["/app/start-cron.sh"]

@@ -32,4 +32,4 @@ RUN python -m pip install --upgrade pip && \
 
 # Create necessary directories
 RUN mkdir -p /app/scholar_data /app/cache /var/log \
-    && chown -R app_user:app_user /app /var/log 
+    && chown -R app_user:app_user /app /var/log

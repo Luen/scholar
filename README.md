@@ -48,13 +48,13 @@ The stack includes:
 - **web** – Flask API serving scholar data
 - **cron** – Runs the main scraper on a schedule
 
-Build the base image:
+Build the base image (required once; no container is created):
 
 ```bash
-docker build -t scholar-base:latest -f Dockerfile.base .
+docker compose build base
 ```
 
-Start all services:
+Start all services (hero, hero-scraper, web, cron; base is build-only and does not run):
 
 ```bash
 docker compose up -d

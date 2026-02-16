@@ -2,15 +2,17 @@ services:
   base:
     build:
       context: .
-      dockerfile: Dockerfile.base
+      dockerfile: base/Dockerfile
     image: scholar-base:latest
+    profiles:
+      - build
     command: ["true"]
     restart: "no"
 
   hero:
     build:
       context: ./hero
-      dockerfile: Dockerfile
+      dockerfile: hero/Dockerfile
     image: scholar-hero:latest
     container_name: scholar_hero
     init: true
@@ -32,7 +34,7 @@ services:
   hero-scraper:
     build:
       context: ./hero-scraper
-      dockerfile: Dockerfile
+      dockerfile: hero-scraper/Dockerfile
     container_name: scholar_hero_scraper
     environment:
       - HERO_CORE_HOST=hero:1818
@@ -51,9 +53,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: Dockerfile
-    depends_on:
-      - base
+      dockerfile: web/Dockerfile
     container_name: scholar_web
     env_file: .env
     environment:
@@ -85,7 +85,7 @@ services:
   cron:
     build:
       context: .
-      dockerfile: Dockerfile.cron
+      dockerfile: cron/Dockerfile
     container_name: scholar_cron
     env_file: .env
     environment:
@@ -107,8 +107,6 @@ services:
         max-file: "3"
     restart: unless-stopped
     depends_on:
-      base:
-        condition: service_started
       web:
         condition: service_healthy
       hero-scraper:
