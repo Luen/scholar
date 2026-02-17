@@ -5,17 +5,34 @@ Fetches the public Altmetric details page and parses bibliographic fields plus
 metrics (score, mention counts, Mendeley readers) from the score-panel HTML.
 No separate embed fetch is needed—the badge URL in the page contains the score.
 
+Uses a dedicated cache with 2-week TTL so Altmetric details refresh bi-weekly.
+
 Reference: https://medium.com/@christopherfkk_19802/data-ingestion-scraping-altmetric-12c1fd234366
 """
 
+import os
 import re
 from dataclasses import dataclass
+from datetime import timedelta
 from urllib.parse import quote
 
 import requests
+import requests_cache
 from bs4 import BeautifulSoup
 
 from .logger import print_warn
+
+# Altmetric-specific cache: 2-week TTL (bi-weekly updates)
+_CACHE_DIR = os.environ.get("CACHE_DIR", "cache")
+_ALT_CACHE_DB = os.path.join(_CACHE_DIR, "http_cache_altmetric")
+os.makedirs(_CACHE_DIR, exist_ok=True)
+_altmetric_session = requests_cache.CachedSession(
+    _ALT_CACHE_DB,
+    backend="sqlite",
+    expire_after=timedelta(weeks=2),
+    allowable_methods=("GET",),
+    allowable_codes=(200, 203, 300, 301),
+)
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -124,7 +141,7 @@ def fetch_altmetric_details(doi: str) -> ScrapedAltmetricDetails | None:
     }
 
     try:
-        resp = requests.get(
+        resp = _altmetric_session.get(
             details_url,
             headers=headers,
             timeout=30,
