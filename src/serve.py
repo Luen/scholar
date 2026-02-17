@@ -93,8 +93,9 @@ def _normalize_doi(doi: str) -> str:
 @app.route("/altmetric/<path:doi>", methods=["GET"])
 def get_altmetric(doi: str):
     """
-    Fetch Altmetric score for a DOI. Cached for 2 weeks.
-    Returns 404 if the page does not contain Rummer, Bergseth, or Wu.
+    Fetch Altmetric data for a DOI. Cached for 2 weeks.
+    Returns full Altmetric data (score, title, authors, counts, etc.).
+    Returns 401 if Crossref does not list Rummer, Bergseth, or Wu.
     """
     doi = _normalize_doi(doi)
     if not doi or "/" not in doi:
@@ -102,14 +103,15 @@ def get_altmetric(doi: str):
     result = fetch_altmetric_score(doi)
     if not result.found:
         return jsonify({"error": "Publication not found or author not in allowlist"}), 401
-    return jsonify({"doi": result.doi, "score": result.score})
+    data = result.details if result.details else {"doi": result.doi, "score": result.score}
+    return jsonify(data)
 
 
 @app.route("/scholar-citations/<path:doi>", methods=["GET"])
 def get_scholar_citations(doi: str):
     """
     Fetch Google Scholar citation count for a DOI. Cached for 2 weeks.
-    Returns 404 if the page does not contain Rummer, Bergseth, or Wu.
+    Returns 401 if Crossref does not list Rummer, Bergseth, or Wu.
     """
     doi = _normalize_doi(doi)
     if not doi or "/" not in doi:

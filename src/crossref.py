@@ -2,6 +2,9 @@
 Crossref API client for fetching publication metadata and citation counts.
 
 Uses the Crossref REST API: https://api.crossref.org/documentation
+
+Crossref metadata (authors, title, journal) is immutable per DOI; only citation
+counts may change. Uses a permanent cache (never expire) for Crossref requests.
 """
 
 import hashlib
@@ -12,8 +15,21 @@ from typing import Any
 from urllib.parse import quote
 
 import requests
+import requests_cache
 
 from .logger import print_warn
+
+# Crossref metadata does not change; cache forever
+_CACHE_DIR = os.environ.get("CACHE_DIR", "cache")
+_CROSSREF_CACHE_DB = os.path.join(_CACHE_DIR, "http_cache_crossref")
+os.makedirs(_CACHE_DIR, exist_ok=True)
+_crossref_session = requests_cache.CachedSession(
+    _CROSSREF_CACHE_DB,
+    backend="sqlite",
+    expire_after=None,  # Never expire
+    allowable_methods=("GET",),
+    allowable_codes=(200, 203, 300, 301),
+)
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -109,7 +125,7 @@ def search_doi_by_title(pub_title: str, author_last_name: str) -> str | None:
             "User-Agent": USER_AGENT,
             "Accept": "application/json",
         }
-        resp = requests.get(CROSSREF_WORKS, params=params, headers=headers, timeout=30)
+        resp = _crossref_session.get(CROSSREF_WORKS, params=params, headers=headers, timeout=30)
         if not resp.ok:
             cache[key] = None
             _save_title_cache()
@@ -163,7 +179,7 @@ def fetch_crossref_details(doi: str) -> CrossrefResponse | None:
             "User-Agent": USER_AGENT,
             "Accept": "application/json",
         }
-        resp = requests.get(url, headers=headers, timeout=30)
+        resp = _crossref_session.get(url, headers=headers, timeout=30)
         if not resp.ok:
             return None
 

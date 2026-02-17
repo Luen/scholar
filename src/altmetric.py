@@ -3,17 +3,18 @@ Altmetric data fetcher.
 
 Fetches the public Altmetric details page and parses bibliographic fields plus
 metrics (score, mention counts, Mendeley readers) from the score-panel HTML.
-No separate embed fetch is needed—the badge URL in the page contains the score.
-
-Uses a dedicated cache with 2-week TTL so Altmetric details refresh bi-weekly.
+Also fetches the badge embed endpoint for cited_by_posts_count and other counts
+that are not on the details page. Embed cache: 1 week; details cache: 2 weeks.
 
 Reference: https://medium.com/@christopherfkk_19802/data-ingestion-scraping-altmetric-12c1fd234366
 """
 
+import json
 import os
 import re
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Any
 from urllib.parse import quote
 
 import requests
@@ -22,9 +23,10 @@ from bs4 import BeautifulSoup
 
 from .logger import print_warn
 
-# Altmetric-specific cache: 2-week TTL (bi-weekly updates)
+# Altmetric details: 2-week TTL (bi-weekly updates)
 _CACHE_DIR = os.environ.get("CACHE_DIR", "cache")
 _ALT_CACHE_DB = os.path.join(_CACHE_DIR, "http_cache_altmetric")
+_ALT_EMBED_CACHE_DB = os.path.join(_CACHE_DIR, "http_cache_altmetric_embed")
 os.makedirs(_CACHE_DIR, exist_ok=True)
 _altmetric_session = requests_cache.CachedSession(
     _ALT_CACHE_DB,
@@ -33,6 +35,16 @@ _altmetric_session = requests_cache.CachedSession(
     allowable_methods=("GET",),
     allowable_codes=(200, 203, 300, 301),
 )
+# Embed: 1-week TTL for cited_by_posts_count and other counts
+_altmetric_embed_session = requests_cache.CachedSession(
+    _ALT_EMBED_CACHE_DB,
+    backend="sqlite",
+    expire_after=timedelta(weeks=1),
+    allowable_methods=("GET",),
+    allowable_codes=(200, 203, 300, 301),
+)
+
+ALT_EMBED_BASE = "https://api.altmetric.com/v1/internal-556fdf0f/id"
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -41,6 +53,22 @@ USER_AGENT = (
 ALT_DETAILS_BASE = "https://www.altmetric.com/details/doi"
 
 _logged_failures: set[str] = set()
+
+
+@dataclass
+class AltmetricEmbedResponse:
+    """Response from the Altmetric badge embed endpoint."""
+
+    doi: str | None = None
+    url: str | None = None
+    score: int | None = None
+    cited_by_posts_count: int | None = None
+    cited_by_accounts_count: int | None = None
+    cited_by_msm_count: int | None = None
+    cited_by_bluesky_count: int | None = None
+    cited_by_tweeters_count: int | None = None
+    cited_by_peer_review_sites_count: int | None = None
+    readers: dict[str, Any] | None = None
 
 
 @dataclass
@@ -72,6 +100,54 @@ def _coerce_int(value) -> int | None:
     try:
         return int(value)
     except (TypeError, ValueError):
+        return None
+
+
+def _parse_embed_response(data: dict[str, Any]) -> AltmetricEmbedResponse:
+    """Parse raw embed JSON into typed response."""
+    readers = data.get("readers") or {}
+    return AltmetricEmbedResponse(
+        doi=data.get("doi"),
+        url=data.get("url"),
+        score=_coerce_int(data.get("score")),
+        cited_by_posts_count=_coerce_int(data.get("cited_by_posts_count")),
+        cited_by_accounts_count=_coerce_int(data.get("cited_by_accounts_count")),
+        cited_by_msm_count=_coerce_int(data.get("cited_by_msm_count")),
+        cited_by_bluesky_count=_coerce_int(data.get("cited_by_bluesky_count")),
+        cited_by_tweeters_count=_coerce_int(data.get("cited_by_tweeters_count")),
+        cited_by_peer_review_sites_count=_coerce_int(
+            data.get("cited_by_peer_review_sites_count")
+        ),
+        readers=readers if isinstance(readers, dict) else None,
+    )
+
+
+def _fetch_altmetric_embed(altmetric_id: str) -> AltmetricEmbedResponse | None:
+    """Fetch Altmetric badge embed data for a given Altmetric ID. Cached 1 week."""
+    url = f"{ALT_EMBED_BASE}/{altmetric_id}?callback=_altmetric.embed_callback"
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "*/*",
+        "Referer": "https://www.altmetric.com/",
+    }
+    try:
+        resp = _altmetric_embed_session.get(url, headers=headers, timeout=30)
+        resp.raise_for_status()
+        body = resp.text.strip()
+        json_str = body.replace("_altmetric.embed_callback(", "").rstrip(");").rstrip(
+            ";"
+        )
+        data = json.loads(json_str)
+        return _parse_embed_response(data)
+    except requests.RequestException as e:
+        if altmetric_id not in _logged_failures:
+            print_warn(f"Altmetric embed fetch failed for id {altmetric_id}: {e}")
+            _logged_failures.add(altmetric_id)
+        return None
+    except (json.JSONDecodeError, KeyError) as e:
+        if altmetric_id not in _logged_failures:
+            print_warn(f"Altmetric embed parse failed for id {altmetric_id}: {e}")
+            _logged_failures.add(altmetric_id)
         return None
 
 
@@ -198,6 +274,19 @@ def fetch_altmetric_details(doi: str) -> ScrapedAltmetricDetails | None:
                 if match:
                     altmetric_id = match.group(1)
             panel = _parse_score_panel(soup)
+            if altmetric_id:
+                embed_data = _fetch_altmetric_embed(altmetric_id)
+                if embed_data:
+                    p = panel or {}
+                    p["cited_by_posts_count"] = embed_data.cited_by_posts_count
+                    p["cited_by_accounts_count"] = embed_data.cited_by_accounts_count
+                    p["cited_by_msm_count"] = embed_data.cited_by_msm_count
+                    p["cited_by_bluesky_count"] = embed_data.cited_by_bluesky_count or p.get("cited_by_bluesky_count")
+                    p["cited_by_tweeters_count"] = embed_data.cited_by_tweeters_count or p.get("cited_by_tweeters_count")
+                    p["cited_by_peer_review_sites_count"] = embed_data.cited_by_peer_review_sites_count
+                    if embed_data.readers and isinstance(embed_data.readers, dict):
+                        p["mendeley_readers"] = _coerce_int(embed_data.readers.get("mendeley")) or p.get("mendeley_readers")
+                    panel = p
         else:
             if doi not in _logged_failures:
                 print_warn(

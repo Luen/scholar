@@ -1,15 +1,16 @@
 """
 DOI metrics: Altmetric score and Google Scholar citations.
 
-Fetches and caches results for two weeks. Returns 401 if the page does not
-contain Rummer, Bergseth, or Wu (author validation).
+Fetches and caches results for two weeks. Uses Crossref first to verify that
+Rummer, Bergseth, or Wu are authors; returns 401 if not. No page-content
+author check after fetching.
 """
 
 import json
 import logging
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from urllib.parse import quote
 
@@ -38,14 +39,6 @@ if not CACHE_DIR:
 def _normalize_doi_for_cache(doi: str) -> str:
     """Safe filename from DOI."""
     return doi.replace("/", "_").replace(":", "_").strip()
-
-
-def _text_contains_allowed_author(text: str) -> bool:
-    """Return True if text contains Rummer, Bergseth, or Wu."""
-    if not text:
-        return False
-    lower = text.lower()
-    return any(a.lower() in lower for a in ALLOWED_AUTHORS)
 
 
 def _authors_contain_allowed(authors: list[str] | None) -> bool:
@@ -134,12 +127,14 @@ class AltmetricResult:
     doi: str
     score: int | None
     found: bool  # True if authors validated
+    details: dict | None = None  # Full Altmetric data for API response
 
 
 def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricResult:
     """
-    Fetch Altmetric score for a DOI. Cached for 2 weeks.
-    Returns found=False (401) if page does not contain Rummer, Bergseth, or Wu.
+    Fetch Altmetric data for a DOI. Cached for 2 weeks.
+    Returns found=False (401) if Crossref does not list Rummer, Bergseth, or Wu.
+    Uses Crossref first to verify authors; no page-content author check after fetch.
     """
     path = _cache_path(doi, "altmetric")
     cached, expired = _read_cache(path)
@@ -148,29 +143,24 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
             doi=doi,
             score=cached.get("score"),
             found=cached.get("found", True),
+            details=cached.get("details"),
         )
 
+    # Crossref first: verify allowed author before fetching
+    crossref = fetch_crossref_details(doi)
+    if not crossref or not _authors_contain_allowed(crossref.authors):
+        _write_cache(path, {"found": False, "score": None, "details": None}, doi=doi)
+        return AltmetricResult(doi=doi, score=None, found=False, details=None)
+
     details = fetch_altmetric_details(doi)
-    if not details:
-        # Altmetric 404 or no data: try Crossref for author verification
-        crossref = fetch_crossref_details(doi)
-        if crossref and _authors_contain_allowed(crossref.authors):
-            _write_cache(path, {"found": True, "score": None}, doi=doi)
-            return AltmetricResult(doi=doi, score=None, found=True)
-        _write_cache(path, {"found": False, "score": None}, doi=doi)
-        return AltmetricResult(doi=doi, score=None, found=False)
-
-    # Check authors (from Altmetric page)
-    text_to_check = " ".join(details.authors) if details.authors else ""
-    if not text_to_check and details.title:
-        text_to_check = details.title
-    if not _text_contains_allowed_author(text_to_check):
-        _write_cache(path, {"found": False, "score": None}, doi=doi)
-        return AltmetricResult(doi=doi, score=details.score, found=False)
-
-    result = AltmetricResult(doi=doi, score=details.score, found=True)
-    _write_cache(path, {"found": True, "score": details.score}, doi=doi)
-    return result
+    if details:
+        details_dict = asdict(details)
+        score = details.score
+    else:
+        details_dict = {"doi": doi, "score": None}
+        score = None
+    _write_cache(path, {"found": True, "score": score, "details": details_dict}, doi=doi)
+    return AltmetricResult(doi=doi, score=score, found=True, details=details_dict)
 
 
 @dataclass
@@ -183,7 +173,8 @@ class ScholarCitationsResult:
 def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> ScholarCitationsResult:
     """
     Fetch Google Scholar citation count for a DOI. Cached for 2 weeks.
-    Returns found=False (401) if page does not contain Rummer, Bergseth, or Wu.
+    Returns found=False (401) if Crossref does not list Rummer, Bergseth, or Wu.
+    Uses Crossref first to verify authors; no page-content author check after fetch.
     """
     path = _cache_path(doi, "scholar")
     cached, expired = _read_cache(path)
@@ -193,6 +184,12 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
             citations=cached.get("citations"),
             found=cached.get("found", True),
         )
+
+    # Crossref first: verify allowed author before fetching
+    crossref = fetch_crossref_details(doi)
+    if not crossref or not _authors_contain_allowed(crossref.authors):
+        _write_cache(path, {"found": False, "citations": None}, doi=doi)
+        return ScholarCitationsResult(doi=doi, citations=None, found=False)
 
     search_url = f"{GOOGLE_SCHOLAR_BASE}?hl=en&as_sdt=0%2C5&q={quote(doi)}&btnG="
     headers = {
@@ -206,18 +203,16 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
         resp = requests.get(search_url, headers=headers, timeout=30)
         if not resp.ok:
             logger.warning("Google Scholar search failed (%s) for DOI %s", resp.status_code, doi)
-            return ScholarCitationsResult(doi=doi, citations=None, found=False)
+            _write_cache(path, {"found": True, "citations": None}, doi=doi)
+            return ScholarCitationsResult(doi=doi, citations=None, found=True)
 
         html = resp.text
         final_url = resp.url or search_url
 
         if _is_blocked_response(html, final_url):
             logger.warning("Google Scholar appears to be blocking requests (CAPTCHA/IP block)")
-            return ScholarCitationsResult(doi=doi, citations=None, found=False)
-
-        if not _text_contains_allowed_author(html):
-            _write_cache(path, {"found": False, "citations": None}, doi=doi)
-            return ScholarCitationsResult(doi=doi, citations=None, found=False)
+            _write_cache(path, {"found": True, "citations": None}, doi=doi)
+            return ScholarCitationsResult(doi=doi, citations=None, found=True)
 
         soup = BeautifulSoup(html, "html.parser")
         citations: int | None = None
@@ -238,4 +233,5 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
 
     except requests.RequestException as e:
         logger.warning("Failed to scrape Google Scholar citations for DOI %s: %s", doi, e)
-        return ScholarCitationsResult(doi=doi, citations=None, found=False)
+        _write_cache(path, {"found": True, "citations": None}, doi=doi)
+        return ScholarCitationsResult(doi=doi, citations=None, found=True)
