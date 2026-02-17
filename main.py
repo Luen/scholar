@@ -17,9 +17,7 @@ from src.video_scraper import get_video_data
 
 def _journal_is_symposium_or_conference(journal: str) -> bool:
     j = (journal or "").strip().lower()
-    return any(
-        x in j for x in ["symposium", "conference", "workshop", "annual meeting"]
-    )
+    return any(x in j for x in ["symposium", "conference", "workshop", "annual meeting"])
 
 
 def _enrich_publication(
@@ -65,7 +63,9 @@ def _enrich_publication(
     else:
         try:
             doi_res = resolve_doi_for_publication(
-                pub_url, pub_title, author_last,
+                pub_url,
+                pub_title,
+                author_last,
                 previous_doi=None,
                 previous_doi_link=None,
                 previous_doi_short=None,
@@ -73,8 +73,11 @@ def _enrich_publication(
             )
         except Exception:
             doi_res = {
-                "doi": "", "doi_link": "", "doi_short": "",
-                "doi_short_link": "", "doi_resolved_link": "",
+                "doi": "",
+                "doi_link": "",
+                "doi_short": "",
+                "doi_short_link": "",
+                "doi_resolved_link": "",
             }
 
     pub["doi"] = doi_res.get("doi", "") or ""

@@ -18,7 +18,11 @@ class VideoItem(TypedDict):
 
 # Mock data: videos related to Dr Jodie Rummer / RummerLab research
 MOCK_VIDEOS: list[VideoItem] = [
-    {"title": "Fish Gills", "author": "Leteisha Prescott", "vimeoUrl": "https://vimeo.com/167221742"},
+    {
+        "title": "Fish Gills",
+        "author": "Leteisha Prescott",
+        "vimeoUrl": "https://vimeo.com/167221742",
+    },
     {
         "title": "Mudskipper Movie Trailer",
         "author": "Tiffany Nay",

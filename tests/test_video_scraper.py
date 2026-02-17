@@ -1,6 +1,6 @@
 """Tests for video scraper."""
 
-from src.video_scraper import get_video_data, MOCK_VIDEOS
+from src.video_scraper import MOCK_VIDEOS, get_video_data
 
 
 def test_get_video_data_returns_mock_videos():

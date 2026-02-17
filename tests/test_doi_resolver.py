@@ -2,8 +2,6 @@
 
 from unittest.mock import patch
 
-import pytest
-
 from src.doi_resolver import resolve_doi_for_publication
 
 

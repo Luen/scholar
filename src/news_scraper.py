@@ -162,7 +162,10 @@ CUSTOM_MEDIA_ADDITIONS: list[MediaItem] = [
         "url": "",
         "date": "2026-01-16T00:00:00Z",
         "sourceType": "Other",
-        "image": {"url": "/images/media/2026-01-16-Cairns-Post.jpg", "alt": "Cairns Post article featuring Dr. Jodie Rummer"},
+        "image": {
+            "url": "/images/media/2026-01-16-Cairns-Post.jpg",
+            "alt": "Cairns Post article featuring Dr. Jodie Rummer",
+        },
         "keywords": ["custom"],
     },
     {
@@ -217,7 +220,9 @@ def strip_html(html: str) -> str:
     if not html:
         return ""
     # Remove script and style blocks
-    html = re.sub(r"<script\b[^<]*(?:(?!</script>)<[^<]*)*</script>", "", html, flags=re.I | re.DOTALL)
+    html = re.sub(
+        r"<script\b[^<]*(?:(?!</script>)<[^<]*)*</script>", "", html, flags=re.I | re.DOTALL
+    )
     html = re.sub(r"<style\b[^<]*(?:(?!</style>)<[^<]*)*</style>", "", html, flags=re.I | re.DOTALL)
     # Remove remaining HTML tags
     text = re.sub(r"<[^>]+>", "", html)
@@ -262,11 +267,17 @@ def does_article_mention_rummer(content: str, title: str, description: str) -> b
         return True
 
     # Primary keywords (RummerLab, Physioshark, etc.)
-    if any(kw in normalized_content or kw in normalized_title or kw in normalized_desc for kw in RUMMER_PRIMARY_KEYWORDS):
+    if any(
+        kw in normalized_content or kw in normalized_title or kw in normalized_desc
+        for kw in RUMMER_PRIMARY_KEYWORDS
+    ):
         return True
 
     # Dr. Rummer specific mentions
-    if any(m in normalized_content or m in normalized_title or m in normalized_desc for m in DR_RUMMER_MENTIONS):
+    if any(
+        m in normalized_content or m in normalized_title or m in normalized_desc
+        for m in DR_RUMMER_MENTIONS
+    ):
         return True
 
     return False
@@ -297,10 +308,31 @@ def might_be_marine_related(title: str, description: str) -> bool:
     if "the conversation" in text:
         return True
     terms = [
-        "shark", "fish", "reef", "coral", "ocean", "marine", "sea", "underwater",
-        "climate", "warming", "acidification", "ecosystem", "biology", "science",
-        "research", "study", "university", "jcu", "james cook", "great barrier",
-        "conservation", "environment", "species", "wildlife", "aquatic",
+        "shark",
+        "fish",
+        "reef",
+        "coral",
+        "ocean",
+        "marine",
+        "sea",
+        "underwater",
+        "climate",
+        "warming",
+        "acidification",
+        "ecosystem",
+        "biology",
+        "science",
+        "research",
+        "study",
+        "university",
+        "jcu",
+        "james cook",
+        "great barrier",
+        "conservation",
+        "environment",
+        "species",
+        "wildlife",
+        "aquatic",
     ]
     return any(t in text for t in terms)
 
@@ -486,10 +518,16 @@ def cached_request(
 
 
 # Feeds that use broader filter (Rummer OR marine keywords OR might-be-marine)
-BROADER_FILTER_FEEDS = frozenset({
-    "ABC News", "Yahoo News AU", "Cosmos Magazine", "Oceanographic Magazine",
-    "Forbes", "Google News",
-})
+BROADER_FILTER_FEEDS = frozenset(
+    {
+        "ABC News",
+        "Yahoo News AU",
+        "Cosmos Magazine",
+        "Oceanographic Magazine",
+        "Forbes",
+        "Google News",
+    }
+)
 
 
 def fetch_rss_feed(
@@ -924,6 +962,7 @@ def fetch_all_news() -> list[MediaItem]:
             article_by_title[norm_title] = article
 
     unique_articles = list(article_by_url.values())
+
     # Sort by source priority (lower first), then by date (newest first)
     def sort_key(a: MediaItem) -> tuple:
         pri = source_priorities.get(a["source"], default_priority)

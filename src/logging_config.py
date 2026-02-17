@@ -31,7 +31,9 @@ def setup_logging(
         json_format = os.environ.get("LOG_FORMAT", "text").lower() == "json"
 
     root = logging.getLogger()
-    root.setLevel(level if isinstance(level, int) else getattr(logging, level.upper(), logging.INFO))
+    root.setLevel(
+        level if isinstance(level, int) else getattr(logging, level.upper(), logging.INFO)
+    )
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(root.level)

@@ -2,8 +2,7 @@
 Altmetric data fetcher.
 
 Fetches the public Altmetric details page, parses bibliographic fields with BeautifulSoup,
-then calls the badge embed endpoint for quantitative metrics. Uses Crossref API as fallback
-when Altmetric lacks structured metadata.
+then calls the badge embed endpoint for quantitative metrics.
 
 Reference: https://medium.com/@christopherfkk_19802/data-ingestion-scraping-altmetric-12c1fd234366
 As of 10 November 2025, all users need an API key to access the Altmetric Details Page API.
@@ -19,7 +18,6 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-from .crossref import fetch_crossref_details
 from .logger import print_warn
 
 USER_AGENT = (
@@ -50,7 +48,7 @@ class AltmetricEmbedResponse:
 
 @dataclass
 class ScrapedAltmetricDetails:
-    """Altmetric scraped details with Crossref fallback fields."""
+    """Altmetric scraped details."""
 
     doi: str
     title: str | None = None
@@ -211,20 +209,7 @@ def fetch_altmetric_details(doi: str) -> ScrapedAltmetricDetails | None:
             print_warn(f"Altmetric parse error for DOI {doi}: {e}")
             _logged_failures.add(doi)
 
-    crossref_data = fetch_crossref_details(doi)
-
-    resolved_title = title or (crossref_data and crossref_data.title)
-    resolved_authors = authors if authors else (crossref_data and crossref_data.authors)
-    resolved_journal = journal or (crossref_data and crossref_data.journal)
-    resolved_year = year if year is not None else (crossref_data and crossref_data.year)
-    resolved_url = (
-        link_href or (embed_data and embed_data.url) or (crossref_data and crossref_data.url)
-    )
-    resolved_citations = (embed_data and embed_data.cited_by_posts_count) or (
-        crossref_data and crossref_data.citation_count
-    )
-
-    if not resolved_title and not resolved_journal and not resolved_authors and not resolved_year:
+    if not title and not journal and not authors and year is None:
         return None
 
     mendeley = None
@@ -233,14 +218,14 @@ def fetch_altmetric_details(doi: str) -> ScrapedAltmetricDetails | None:
 
     return ScrapedAltmetricDetails(
         doi=doi,
-        title=resolved_title,
-        journal=resolved_journal,
+        title=title,
+        journal=journal,
         published_text=published_text,
-        year=resolved_year,
-        authors=resolved_authors,
-        url=resolved_url,
+        year=year,
+        authors=authors,
+        url=link_href or (embed_data.url if embed_data else None),
         score=embed_data.score if embed_data else None,
-        cited_by_posts_count=resolved_citations,
+        cited_by_posts_count=embed_data.cited_by_posts_count if embed_data else None,
         cited_by_accounts_count=embed_data.cited_by_accounts_count if embed_data else None,
         cited_by_msm_count=embed_data.cited_by_msm_count if embed_data else None,
         cited_by_bluesky_count=embed_data.cited_by_bluesky_count if embed_data else None,

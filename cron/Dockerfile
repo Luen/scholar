@@ -18,9 +18,12 @@ RUN touch /var/log/app.log \
     && chown app_user:app_user /var/log/app.log \
     && mkdir -p /app/logs \
     && chown -R app_user:app_user /app/logs \
-    && echo "0 0 */14 * * cd /app && python main.py ynWS968AAAAJ >> /var/log/app.log 2>&1 && python main.py g9B1IoQAAAAJ >> /var/log/app.log 2>&1 && python main.py cXDRggIAAAAJ >> /var/log/app.log 2>&1" > /etc/cron.d/run_main \
-    && chmod 0644 /etc/cron.d/run_main \
-    && crontab -u app_user /etc/cron.d/run_main
+    && printf '%s\n%s\n' \
+        "0 0 */14 * * cd /app && python main.py ynWS968AAAAJ >> /var/log/app.log 2>&1 && python main.py g9B1IoQAAAAJ >> /var/log/app.log 2>&1 && python main.py cXDRggIAAAAJ >> /var/log/app.log 2>&1" \
+        "0 2 */14 * * cd /app && python scripts/revalidate_doi_metrics.py >> /var/log/app.log 2>&1" \
+        > /etc/cron.d/scholar_cron \
+    && chmod 0644 /etc/cron.d/scholar_cron \
+    && crontab -u app_user /etc/cron.d/scholar_cron
 
 # Create a wrapper script to run cron
 RUN echo '#!/bin/bash\nsudo /usr/sbin/cron -f' > /app/start-cron.sh \

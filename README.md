@@ -145,6 +145,8 @@ The API is available at `http://localhost:8000` (Docker maps 8000→5000).
 | `/health` | GET | Health check |
 | `/scholars` | GET | List available scholar IDs |
 | `/scholar/<id>` | GET | Get scholar data by ID (e.g. `/scholar/ynWS968AAAAJ`) |
+| `/altmetric/<doi>` | GET | Altmetric score for a DOI (cached 2 weeks). 401 if not Rummer/Bergseth/Wu |
+| `/scholar-citations/<doi>` | GET | Google Scholar citation count for a DOI (cached 2 weeks). 401 if not Rummer/Bergseth/Wu |
 
 ### Environment variables
 

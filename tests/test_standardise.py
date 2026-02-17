@@ -1,8 +1,6 @@
 """Unit tests for standardise module."""
 
-import pytest
-
-from src.standardise import initialize, standardise_authors, levenshtein
+from src.standardise import initialize, levenshtein, standardise_authors
 
 
 def test_initialize_empty():

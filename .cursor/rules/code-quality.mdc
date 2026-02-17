@@ -1,9 +1,24 @@
 ---
-description: Code quality, best practices, and DRY principles
+description: Code quality, refactoring, cleanup, and senior-level standards
 alwaysApply: true
 ---
 
 # Code Quality and Best Practices
+
+## Refactoring and Cleanup
+
+- **Always refactor** when touching code: improve structure, naming, and readability
+- **Remove dead code** — delete unused functions, classes, imports, and files
+- **Delete obsolete files** — if a module or script is superseded, remove it (don’t leave legacy code)
+- **Keep the repo lean** — avoid cruft; aim for a codebase that’s easy to understand and maintain
+- **Clean as you go** — when adding or changing code, tidy related areas and fix nearby issues
+
+## Senior Developer Standards
+
+- Write code that a new teammate can understand without hand-holding
+- Prefer small, focused modules over large monoliths
+- Use clear abstractions; avoid clever tricks that obscure intent
+- Document non-obvious behavior; keep the code itself as the primary documentation
 
 ## DRY (Don't Repeat Yourself)
 

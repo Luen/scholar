@@ -1,11 +1,8 @@
 """Unit tests for output module."""
 
-import json
 import os
 import tempfile
 from datetime import datetime, timedelta
-
-import pytest
 
 from src.output import (
     SCHEMA_VERSION,

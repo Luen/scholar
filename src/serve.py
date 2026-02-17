@@ -4,6 +4,13 @@ import re
 
 from flask import Flask, jsonify, send_from_directory
 
+import src.cache_config  # noqa: F401 - configure HTTP cache before requests
+
+from .doi_metrics import (
+    fetch_altmetric_score,
+    fetch_google_scholar_citations,
+)
+
 app = Flask(__name__)
 
 SCHOLAR_DATA_DIR = os.environ.get("SCHOLAR_DATA_DIR", "scholar_data")
@@ -52,9 +59,7 @@ def list_scholars():
         return jsonify({"scholars": []}), 200
     try:
         ids = [
-            f.replace(".json", "")
-            for f in os.listdir(SCHOLAR_DATA_DIR_ABS)
-            if f.endswith(".json")
+            f.replace(".json", "") for f in os.listdir(SCHOLAR_DATA_DIR_ABS) if f.endswith(".json")
         ]
         return jsonify({"scholars": sorted(ids)}), 200
     except OSError:
@@ -77,6 +82,41 @@ def get_scholar(id):
         return jsonify({"error": "Author not found"}), 404
     except json.JSONDecodeError:
         return jsonify({"error": "Invalid scholar data"}), 500
+
+
+def _normalize_doi(doi: str) -> str:
+    """Normalize DOI for validation (basic pattern)."""
+    return (doi or "").strip()
+
+
+@app.route("/altmetric/<path:doi>", methods=["GET"])
+def get_altmetric(doi: str):
+    """
+    Fetch Altmetric score for a DOI. Cached for 2 weeks.
+    Returns 404 if the page does not contain Rummer, Bergseth, or Wu.
+    """
+    doi = _normalize_doi(doi)
+    if not doi or "/" not in doi:
+        return jsonify({"error": "Invalid DOI"}), 400
+    result = fetch_altmetric_score(doi)
+    if not result.found:
+        return jsonify({"error": "Publication not found or author not in allowlist"}), 401
+    return jsonify({"doi": result.doi, "score": result.score})
+
+
+@app.route("/scholar-citations/<path:doi>", methods=["GET"])
+def get_scholar_citations(doi: str):
+    """
+    Fetch Google Scholar citation count for a DOI. Cached for 2 weeks.
+    Returns 404 if the page does not contain Rummer, Bergseth, or Wu.
+    """
+    doi = _normalize_doi(doi)
+    if not doi or "/" not in doi:
+        return jsonify({"error": "Invalid DOI"}), 400
+    result = fetch_google_scholar_citations(doi)
+    if not result.found:
+        return jsonify({"error": "Publication not found or author not in allowlist"}), 401
+    return jsonify({"doi": result.doi, "citations": result.citations})
 
 
 if __name__ == "__main__":

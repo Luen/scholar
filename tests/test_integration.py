@@ -3,12 +3,11 @@
 import json
 import os
 import tempfile
-from unittest.mock import patch
 
 import pytest
 
 from src.config import Config
-from src.output import load_author, save_author, is_fresh
+from src.output import save_author
 from src.retry import with_retry
 
 
@@ -52,6 +51,7 @@ def test_retry_decorator_retries_on_exception():
 
 def test_retry_decorator_raises_after_max_retries():
     """Retry decorator raises after max retries."""
+
     @with_retry(max_retries=2, base_delay=0.01)
     def always_fails():
         raise ValueError("nope")

@@ -90,6 +90,8 @@ def resolve_doi_for_publication(
 
     doi_short = previous_doi_short or get_doi_short(doi)
     result["doi_short"] = doi_short or ""
-    result["doi_short_link"] = previous_doi_short_link or (get_doi_short_link(doi_short) if doi_short else "") or ""
+    result["doi_short_link"] = (
+        previous_doi_short_link or (get_doi_short_link(doi_short) if doi_short else "") or ""
+    )
 
     return result
