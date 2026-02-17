@@ -5,7 +5,7 @@
 # Jodie Rummer = ynWS968AAAAJ
 # Brock Bergseth = g9B1IoQAAAAJ
 # Nicholas C. Wu = cXDRggIAAAAJ
-ids=("ynWS968AAAAJ" "g9B1IoQAAAAJ" "cXDRggIAAAAJ")
+ids=("ynWS968AAAAJ" "g9B1IoQAAAAJ")
 
 # Generate JSON files (one per scholar; main.py writes to scholar_data/$id.json)
 for id in "${ids[@]}"; do

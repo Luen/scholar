@@ -86,6 +86,18 @@ docker compose exec cron python main.py ynWS968AAAAJ
 docker compose logs web
 ```
 
+## Project structure
+
+- `main.py` – Orchestration only: loads config, runs pipeline, handles idempotency
+- `src/scholar_fetcher.py` – Author, coauthors, publications from scholarly (with retries)
+- `src/doi_resolver.py` – DOI lookup and resolution (with retries)
+- `src/output.py` – Load/save JSON, `schema_version`, `last_fetched`, resume indices
+- `src/config.py` – Config loaded from `.env`
+- `src/retry.py` – Retry decorator with exponential backoff
+- `src/logging_config.py` – Structured logging (text or JSON)
+
+Output JSON includes `schema_version`, `last_fetched`, and `_last_successful_*_index` for resume support.
+
 ## Development
 
 ### Linting and formatting
@@ -139,3 +151,9 @@ The API is available at `http://localhost:8000` (Docker maps 8000→5000).
 - `FLASK_HOST` – Bind host (default: `0.0.0.0`)
 - `FLASK_PORT` – Bind port (default: `5000`)
 - `SCHOLAR_DATA_DIR` – Path to scholar JSON files (default: `scholar_data`)
+- `CACHE_DIR` – HTTP cache directory (default: `cache`)
+- `CACHE_EXPIRE_SECONDS` – Cache expiry (default: 30 days)
+- `FRESH_DATA_SECONDS` – Skip full fetch if data is newer (default: 7 days)
+- `MAX_RETRIES`, `RETRY_BASE_DELAY` – Retry settings for Scholar/DOI APIs
+- `COAUTHOR_DELAY`, `PUBLICATION_DELAY` – Rate limiting (seconds)
+- `LOG_FORMAT` – Set to `json` for structured JSON logs (e.g. in Docker)
