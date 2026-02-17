@@ -1,0 +1,33 @@
+# Large data directories (mounted at runtime via docker-compose)
+scholar_data/
+cache/
+downloaded_files/
+
+# Git and IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+.eggs/
+venv/
+.venv/
+
+# Logs and temp
+*.log
+src/logs/
+
+# Env (use env_file in compose)
+.env
+
+# Docs and tests (not needed in production image)
+docs/
+*.md
+!README.md

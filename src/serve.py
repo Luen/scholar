@@ -12,6 +12,7 @@ from .doi_metrics import (
 )
 
 app = Flask(__name__)
+app.config["JSON_SORT_KEYS"] = False  # Preserve key order: doi first, then citations/score
 
 SCHOLAR_DATA_DIR = os.environ.get("SCHOLAR_DATA_DIR", "scholar_data")
 SCHOLAR_DATA_DIR_ABS = os.path.abspath(SCHOLAR_DATA_DIR)

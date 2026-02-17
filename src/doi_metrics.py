@@ -17,6 +17,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from .altmetric import fetch_altmetric_details
+from .crossref import fetch_crossref_details
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +40,20 @@ def _normalize_doi_for_cache(doi: str) -> str:
     return doi.replace("/", "_").replace(":", "_").strip()
 
 
-def _page_contains_allowed_author(text: str) -> bool:
+def _text_contains_allowed_author(text: str) -> bool:
     """Return True if text contains Rummer, Bergseth, or Wu."""
     if not text:
         return False
     lower = text.lower()
     return any(a.lower() in lower for a in ALLOWED_AUTHORS)
+
+
+def _authors_contain_allowed(authors: list[str] | None) -> bool:
+    """Return True if any author family name contains Rummer, Bergseth, or Wu."""
+    if not authors:
+        return False
+    combined = " ".join(authors).lower()
+    return any(a.lower() in combined for a in ALLOWED_AUTHORS)
 
 
 def _cache_path(doi: str, prefix: str) -> str:
@@ -143,6 +152,11 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
 
     details = fetch_altmetric_details(doi)
     if not details:
+        # Altmetric 404 or no data: try Crossref for author verification
+        crossref = fetch_crossref_details(doi)
+        if crossref and _authors_contain_allowed(crossref.authors):
+            _write_cache(path, {"found": True, "score": None}, doi=doi)
+            return AltmetricResult(doi=doi, score=None, found=True)
         _write_cache(path, {"found": False, "score": None}, doi=doi)
         return AltmetricResult(doi=doi, score=None, found=False)
 
@@ -150,7 +164,7 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
     text_to_check = " ".join(details.authors) if details.authors else ""
     if not text_to_check and details.title:
         text_to_check = details.title
-    if not _page_contains_allowed_author(text_to_check):
+    if not _text_contains_allowed_author(text_to_check):
         _write_cache(path, {"found": False, "score": None}, doi=doi)
         return AltmetricResult(doi=doi, score=details.score, found=False)
 
@@ -201,7 +215,7 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
             logger.warning("Google Scholar appears to be blocking requests (CAPTCHA/IP block)")
             return ScholarCitationsResult(doi=doi, citations=None, found=False)
 
-        if not _page_contains_allowed_author(html):
+        if not _text_contains_allowed_author(html):
             _write_cache(path, {"found": False, "citations": None}, doi=doi)
             return ScholarCitationsResult(doi=doi, citations=None, found=False)
 
