@@ -4,6 +4,9 @@ Crossref API client for fetching publication metadata and citation counts.
 Uses the Crossref REST API: https://api.crossref.org/documentation
 """
 
+import hashlib
+import json
+import os
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
@@ -16,9 +19,45 @@ USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
-CROSSREF_BASE = "https://api.crossref.org/works"
+CROSSREF_BASE = "https://api.crossref.org"
+CROSSREF_WORKS = f"{CROSSREF_BASE}/works"
+
+CACHE_DIR = os.path.join(os.environ.get("CACHE_DIR", "cache"), "crossref_title")
+CACHE_FILE = os.path.join(CACHE_DIR, "doi_by_title.json")
 
 _logged_failures: set[str] = set()
+_crossref_title_cache: dict[str, str | None] | None = None
+
+
+def _cache_key(title: str, author: str) -> str:
+    key = f"{title.strip().lower()}|{(author or '').strip().lower()}"
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
+def _load_title_cache() -> dict[str, str | None]:
+    global _crossref_title_cache
+    if _crossref_title_cache is not None:
+        return _crossref_title_cache
+    if not os.path.isfile(CACHE_FILE):
+        _crossref_title_cache = {}
+        return _crossref_title_cache
+    try:
+        with open(CACHE_FILE, encoding="utf-8") as f:
+            _crossref_title_cache = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        _crossref_title_cache = {}
+    return _crossref_title_cache
+
+
+def _save_title_cache() -> None:
+    if _crossref_title_cache is None:
+        return
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(_crossref_title_cache, f, indent=2)
+    except OSError:
+        pass
 
 
 @dataclass
@@ -43,13 +82,83 @@ def _coerce_int(value: Any) -> int | None:
         return None
 
 
+def search_doi_by_title(pub_title: str, author_last_name: str) -> str | None:
+    """
+    Search Crossref by publication title and author; return the best-matching DOI.
+
+    Results are cached forever (DOIs do not change). Uses the Crossref REST API
+    /works endpoint with query.title and query.author.
+    """
+    if not pub_title or not pub_title.strip():
+        return None
+
+    cache = _load_title_cache()
+    key = _cache_key(pub_title.strip(), author_last_name or "")
+    if key in cache:
+        return cache[key]
+
+    try:
+        params = {
+            "query.title": pub_title.strip(),
+            "rows": 5,
+        }
+        if author_last_name and author_last_name.strip():
+            params["query.author"] = author_last_name.strip()
+
+        headers = {
+            "User-Agent": USER_AGENT,
+            "Accept": "application/json",
+        }
+        resp = requests.get(CROSSREF_WORKS, params=params, headers=headers, timeout=30)
+        if not resp.ok:
+            cache[key] = None
+            _save_title_cache()
+            return None
+
+        data = resp.json()
+        items = data.get("message", {}).get("items", [])
+        if not items:
+            cache[key] = None
+            _save_title_cache()
+            return None
+
+        author_lower = author_last_name.strip().lower() if author_last_name else ""
+        for item in items:
+            doi = item.get("DOI")
+            if not doi:
+                continue
+            if author_lower:
+                authors = item.get("author", [])
+                for a in authors:
+                    if isinstance(a, dict) and author_lower in (a.get("family") or "").lower():
+                        cache[key] = doi
+                        _save_title_cache()
+                        return doi
+            else:
+                cache[key] = doi
+                _save_title_cache()
+                return doi
+        # No author filter, or no author match: return first result if no author given
+        result = items[0].get("DOI") if not author_lower else None
+        cache[key] = result
+        _save_title_cache()
+        return result
+    except (requests.RequestException, KeyError, TypeError, IndexError) as e:
+        if "crossref_title_search" not in _logged_failures:
+            print_warn(f"Crossref title search failed for '{pub_title[:50]}...': {e}")
+            _logged_failures.add("crossref_title_search")
+        cache[key] = None
+        _save_title_cache()
+        return None
+
+
 def fetch_crossref_details(doi: str) -> CrossrefResponse | None:
     """
     Fetch publication metadata and citation count from Crossref API.
     """
     try:
         encoded_doi = quote(doi, safe="")
-        url = f"{CROSSREF_BASE}/{encoded_doi}"
+        url = f"{CROSSREF_WORKS}/{encoded_doi}"
         headers = {
             "User-Agent": USER_AGENT,
             "Accept": "application/json",

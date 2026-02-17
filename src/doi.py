@@ -78,17 +78,30 @@ def get_doi(url, author):
 
 
 def get_doi_from_title(pub_title, author):
-    # Google Search the publication's title to find what is likely the publication's url and then the DOI from that page
-    print_misc(f"Publication URL is a Google Scholar URL. Publication Title: {pub_title}")
+    """
+    Get DOI for a publication by title. Tries Crossref API first, then Google Search.
+    """
+    if not pub_title or not pub_title.strip():
+        return None
 
+    # Try Crossref API first (fast, no rate limits for reasonable use)
+    from .crossref import search_doi_by_title
+
+    author_last = author.strip().split()[-1] if author and author.strip() else ""
+    doi = search_doi_by_title(pub_title.strip(), author_last)
+    if doi:
+        print_info(f"Found DOI via Crossref title search: {doi}")
+        return doi
+
+    # Fall back to Google Search
+    print_misc(f"Crossref found nothing. Trying Google Search for: {pub_title[:60]}...")
     domain = "google.com"
     if domain in last_scraped and time.time() - last_scraped[domain] < 30:
-        print_misc(f"Sleeping for 1 seconds to avoid being blocked by {domain}")
+        print_misc(f"Sleeping for 1 second to avoid being blocked by {domain}")
         time.sleep(1)
     last_scraped[domain] = time.time()
 
     results = search(pub_title)
-    doi = None
     for result in results:
         print_warn(f"Getting DOI from Google Search result {result}")
         doi = get_doi(result, author)

@@ -2,7 +2,24 @@
 
 import pytest
 
-from src.crossref import CrossrefResponse, fetch_crossref_details
+from src.crossref import CrossrefResponse, fetch_crossref_details, search_doi_by_title
+
+
+def test_search_doi_by_title_empty_title():
+    """Empty title returns None without network."""
+    assert search_doi_by_title("", "Rummer") is None
+    assert search_doi_by_title("   ", "Rummer") is None
+
+
+@pytest.mark.integration
+def test_search_doi_by_title_returns_doi():
+    """Crossref title search finds DOI for known paper."""
+    doi = search_doi_by_title(
+        "A framework for understanding climate change impacts on coral reef", "Rummer"
+    )
+    assert doi is not None
+    assert doi.startswith("10.")
+    assert "/" in doi
 
 
 @pytest.mark.integration
