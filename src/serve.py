@@ -107,8 +107,8 @@ def get_altmetric(doi: str):
     return jsonify(data)
 
 
-@app.route("/scholar-citations/<path:doi>", methods=["GET"])
-def get_scholar_citations(doi: str):
+@app.route("/google-citations/<path:doi>", methods=["GET"])
+def get_google_citations(doi: str):
     """
     Fetch Google Scholar citation count for a DOI. Cached for 2 weeks.
     Returns 401 if Crossref does not list Rummer, Bergseth, or Wu.
