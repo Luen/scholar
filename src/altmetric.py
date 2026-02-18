@@ -278,14 +278,16 @@ def fetch_altmetric_details(doi: str) -> ScrapedAltmetricDetails | None:
                 embed_data = _fetch_altmetric_embed(altmetric_id)
                 if embed_data:
                     p = panel or {}
+                    p["score"] = embed_data.score if embed_data.score is not None else p.get("score")
                     p["cited_by_posts_count"] = embed_data.cited_by_posts_count
                     p["cited_by_accounts_count"] = embed_data.cited_by_accounts_count
                     p["cited_by_msm_count"] = embed_data.cited_by_msm_count
-                    p["cited_by_bluesky_count"] = embed_data.cited_by_bluesky_count or p.get("cited_by_bluesky_count")
-                    p["cited_by_tweeters_count"] = embed_data.cited_by_tweeters_count or p.get("cited_by_tweeters_count")
+                    p["cited_by_bluesky_count"] = embed_data.cited_by_bluesky_count if embed_data.cited_by_bluesky_count is not None else p.get("cited_by_bluesky_count")
+                    p["cited_by_tweeters_count"] = embed_data.cited_by_tweeters_count if embed_data.cited_by_tweeters_count is not None else p.get("cited_by_tweeters_count")
                     p["cited_by_peer_review_sites_count"] = embed_data.cited_by_peer_review_sites_count
                     if embed_data.readers and isinstance(embed_data.readers, dict):
-                        p["mendeley_readers"] = _coerce_int(embed_data.readers.get("mendeley")) or p.get("mendeley_readers")
+                        mendeley = _coerce_int(embed_data.readers.get("mendeley"))
+                        p["mendeley_readers"] = mendeley if mendeley is not None else p.get("mendeley_readers")
                     panel = p
         else:
             if doi not in _logged_failures:

@@ -201,17 +201,27 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
 
     try:
         resp = requests.get(search_url, headers=headers, timeout=30)
-        if not resp.ok:
-            logger.warning("Google Scholar search failed (%s) for DOI %s", resp.status_code, doi)
-            _write_cache(path, {"found": True, "citations": None}, doi=doi)
-            return ScholarCitationsResult(doi=doi, citations=None, found=True)
-
         html = resp.text
         final_url = resp.url or search_url
 
+        if not resp.ok:
+            logger.warning("Google Scholar search failed (%s) for DOI %s", resp.status_code, doi)
+            if cached is not None:
+                return ScholarCitationsResult(
+                    doi=doi,
+                    citations=cached.get("citations"),
+                    found=cached.get("found", True),
+                )
+            return ScholarCitationsResult(doi=doi, citations=None, found=True)
+
         if _is_blocked_response(html, final_url):
             logger.warning("Google Scholar appears to be blocking requests (CAPTCHA/IP block)")
-            _write_cache(path, {"found": True, "citations": None}, doi=doi)
+            if cached is not None:
+                return ScholarCitationsResult(
+                    doi=doi,
+                    citations=cached.get("citations"),
+                    found=cached.get("found", True),
+                )
             return ScholarCitationsResult(doi=doi, citations=None, found=True)
 
         soup = BeautifulSoup(html, "html.parser")
