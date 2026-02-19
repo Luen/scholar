@@ -27,9 +27,9 @@ logger = logging.getLogger(__name__)
 # Constants
 REVALIDATE_TIME = 604800  # One week in seconds
 
-# Cache configuration
-CACHE_DIR = Path("cache")
-CACHE_DIR.mkdir(exist_ok=True)
+# Cache configuration (use CACHE_DIR env so Docker/server volume is used)
+CACHE_DIR = Path(os.environ.get("CACHE_DIR", "cache"))
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 SEARCH_KEYWORDS = [
     "Jodie Rummer",
