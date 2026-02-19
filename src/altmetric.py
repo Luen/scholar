@@ -22,6 +22,7 @@ import requests_cache
 from bs4 import BeautifulSoup
 
 from .logger import print_warn
+from .proxy_config import get_socks5_proxies
 
 # Altmetric details: 2-week TTL (bi-weekly updates)
 _CACHE_DIR = os.environ.get("CACHE_DIR", "cache")
@@ -131,7 +132,10 @@ def _fetch_altmetric_embed(altmetric_id: str) -> AltmetricEmbedResponse | None:
         "Referer": "https://www.altmetric.com/",
     }
     try:
-        resp = _altmetric_embed_session.get(url, headers=headers, timeout=30)
+        proxies = get_socks5_proxies()
+        resp = _altmetric_embed_session.get(
+            url, headers=headers, timeout=30, proxies=proxies
+        )
         resp.raise_for_status()
         body = resp.text.strip()
         json_str = body.replace("_altmetric.embed_callback(", "").rstrip(");").rstrip(
@@ -217,11 +221,13 @@ def fetch_altmetric_details(doi: str) -> ScrapedAltmetricDetails | None:
     }
 
     try:
+        proxies = get_socks5_proxies()
         resp = _altmetric_session.get(
             details_url,
             headers=headers,
             timeout=30,
             allow_redirects=True,
+            proxies=proxies,
         )
         if resp.ok:
             soup = BeautifulSoup(resp.text, "html.parser")

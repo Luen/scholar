@@ -19,6 +19,7 @@ from bs4 import BeautifulSoup
 
 from .altmetric import fetch_altmetric_details
 from .crossref import fetch_crossref_details
+from .proxy_config import get_socks5_proxies
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +201,10 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
     }
 
     try:
-        resp = requests.get(search_url, headers=headers, timeout=30)
+        proxies = get_socks5_proxies()
+        resp = requests.get(
+            search_url, headers=headers, timeout=30, proxies=proxies
+        )
         html = resp.text
         final_url = resp.url or search_url
 
