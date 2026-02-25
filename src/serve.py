@@ -6,6 +6,7 @@ from flask import Flask, jsonify, send_from_directory
 
 import src.cache_config  # noqa: F401 - configure HTTP cache before requests
 
+from .doi_utils import normalize_doi
 from .scholar_citations import (
     fetch_altmetric_score,
     fetch_google_scholar_citations,
@@ -85,9 +86,9 @@ def get_scholar(id):
         return jsonify({"error": "Invalid scholar data"}), 500
 
 
-def _normalize_doi(doi: str) -> str:
-    """Normalize DOI for validation (basic pattern)."""
-    return (doi or "").strip()
+def _normalize_doi_for_api(doi: str) -> str:
+    """Normalize DOI: unquote (handles URL-encoded DOIs) and strip."""
+    return normalize_doi(doi)
 
 
 @app.route("/altmetric/<path:doi>", methods=["GET"])
@@ -97,7 +98,7 @@ def get_altmetric(doi: str):
     Returns full Altmetric data (score, title, authors, counts, etc.).
     Returns 401 if Crossref does not list Rummer, Bergseth, or Wu.
     """
-    doi = _normalize_doi(doi)
+    doi = _normalize_doi_for_api(doi)
     if not doi or "/" not in doi:
         return jsonify({"error": "Invalid DOI"}), 400
     result = fetch_altmetric_score(doi)
@@ -113,7 +114,7 @@ def get_google_citations(doi: str):
     Fetch Google Scholar citation count for a DOI. Cached for 2 weeks.
     Returns 401 if Crossref does not list Rummer, Bergseth, or Wu.
     """
-    doi = _normalize_doi(doi)
+    doi = _normalize_doi_for_api(doi)
     if not doi or "/" not in doi:
         return jsonify({"error": "Invalid DOI"}), 400
     result = fetch_google_scholar_citations(doi)
