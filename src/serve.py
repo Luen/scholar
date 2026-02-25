@@ -50,7 +50,7 @@ def favicon():
 
 @app.route("/", methods=["GET"])
 def index():
-    return "Welcome to the scholarly API"
+    return "Welcome to the scholar API"
 
 
 @app.route("/scholars", methods=["GET"])
