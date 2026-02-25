@@ -124,6 +124,9 @@ def _parse_scholar_citations(soup: BeautifulSoup) -> tuple[int | None, bool]:
                     pass
 
     no_results = "did not match any articles" in soup.get_text()
+    # Result found but no "Cited by" link (e.g. new article) => treat as 0
+    if citations is None and not no_results:
+        citations = 0
     return citations, no_results
 
 
