@@ -18,6 +18,8 @@ from typing import Any
 from urllib.parse import quote
 
 import requests
+
+from .doi_utils import normalize_doi
 import requests_cache
 from bs4 import BeautifulSoup
 
@@ -203,6 +205,7 @@ def fetch_altmetric_details(doi: str) -> ScrapedAltmetricDetails | None:
     Fetches the public Altmetric details page and parses bibliographic fields
     plus metrics (score from badge URL, mention counts, Mendeley) from the HTML.
     """
+    doi = normalize_doi(doi)
     title: str | None = None
     link_href: str | None = None
     journal: str | None = None

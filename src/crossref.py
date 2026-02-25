@@ -17,6 +17,7 @@ from urllib.parse import quote
 import requests
 import requests_cache
 
+from .doi_utils import normalize_doi
 from .logger import print_warn
 
 # Crossref metadata does not change; cache forever
@@ -172,6 +173,7 @@ def fetch_crossref_details(doi: str) -> CrossrefResponse | None:
     """
     Fetch publication metadata and citation count from Crossref API.
     """
+    doi = normalize_doi(doi)
     try:
         encoded_doi = quote(doi, safe="")
         url = f"{CROSSREF_WORKS}/{encoded_doi}"

@@ -15,6 +15,8 @@ from datetime import datetime, timedelta
 from urllib.parse import quote
 
 import requests
+
+from .doi_utils import normalize_doi
 from bs4 import BeautifulSoup
 
 from .altmetric import fetch_altmetric_details
@@ -38,7 +40,7 @@ if not CACHE_DIR:
 
 
 def _normalize_doi_for_cache(doi: str) -> str:
-    """Safe filename from DOI."""
+    """Safe filename from DOI. Expects already-normalized DOI."""
     return doi.replace("/", "_").replace(":", "_").strip()
 
 
@@ -87,7 +89,7 @@ def list_cached_successful_dois() -> set[str]:
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
             if data.get("found") and data.get("doi"):
-                dois.add(data["doi"])
+                dois.add(normalize_doi(data["doi"]))
         except (json.JSONDecodeError, OSError, KeyError):
             continue
     return dois
@@ -181,6 +183,7 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
     Returns found=False (401) if Crossref does not list Rummer, Bergseth, or Wu.
     Uses Crossref first to verify authors; no page-content author check after fetch.
     """
+    doi = normalize_doi(doi)
     path = _cache_path(doi, "altmetric")
     cached, expired = _read_cache(path)
     if not force_refresh and cached is not None and not expired:
@@ -221,6 +224,7 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
     Searches by DOI first; if that returns no results, searches by publication title.
     Returns found=False (401) if Crossref does not list Rummer, Bergseth, or Wu.
     """
+    doi = normalize_doi(doi)
     path = _cache_path(doi, "scholar")
     cached, expired = _read_cache(path)
     if not force_refresh and cached is not None and not expired:
