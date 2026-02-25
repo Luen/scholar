@@ -15,7 +15,7 @@ altmetrics
 
 ### Prerequisites
 
-- Python 3.6+
+- Python 3.10+ (required by Scrapling)
 - Flask
 - scholarly
 - Wikipedia
@@ -43,8 +43,6 @@ altmetrics
 
 The stack includes:
 
-- **hero** – [Ulixee Hero](https://github.com/ulixee/hero) Cloud (browser automation for scraping)
-- **hero-scraper** – HTTP API wrapper that sends URLs to Hero and returns HTML
 - **web** – Flask API serving scholar data
 - **cron** – Runs the main scraper on a schedule
 
@@ -54,13 +52,13 @@ Build the base image (required once; no container is created):
 docker compose build base
 ```
 
-Start all services (hero, hero-scraper, web, cron; base is build-only and does not run):
+Start all services (web, cron; base is build-only and does not run):
 
 ```bash
 docker compose up -d
 ```
 
-For browser-based scraping (DOIs, etc.), the hero-scraper service must be running. Set `HERO_SCRAPER_URL` (default: `http://hero-scraper:3000` in Docker, `http://localhost:3000` locally) to point at it.
+For browser-based DOI fetching on sites that block plain HTTP, the project uses [Scrapling](https://github.com/D4Vinci/Scrapling). Install browser dependencies with `scrapling install` if you use that path. News aggregation uses RSS, [NewsAPI](https://newsapi.org/), the Guardian API, [Newspaper4k](https://github.com/AndyTheFactory/newspaper4k), and other sources.
 
 ### Caching
 
@@ -68,7 +66,7 @@ HTTP responses are cached with [requests-cache](https://requests-cache.readthedo
 
 - Scholarly (Google Scholar) requests
 - DOI API requests (doi.org, shortdoi.org)
-- Hero scraper (browser-fetched HTML)
+- Scrapling (browser-fetched HTML for DOI extraction)
 - Web page fetches for DOI extraction
 
 Set `CACHE_DIR` to change the cache location; `CACHE_EXPIRE_SECONDS` (default: 30 days) to control expiry.
@@ -115,7 +113,7 @@ pip install -r requirements.txt
 pytest tests/ -v
 ```
 
-Tests marked `integration` require network access. Tests that need `google-credentials.json` or the Hero scraper will skip when unavailable. Run lint and format before committing:
+Tests marked `integration` require network access. Tests that need `google-credentials.json` or Scrapling browsers will skip when unavailable. Run lint and format before committing:
 
 ```bash
 ruff check . && ruff format --check .
@@ -159,3 +157,4 @@ The API is available at `http://localhost:8000` (Docker maps 8000→5000).
 - `MAX_RETRIES`, `RETRY_BASE_DELAY` – Retry settings for Scholar/DOI APIs
 - `COAUTHOR_DELAY`, `PUBLICATION_DELAY` – Rate limiting (seconds)
 - `LOG_FORMAT` – Set to `json` for structured JSON logs (e.g. in Docker)
+- `NEWS_API_ORG_KEY`, `THE_GUARDIAN_API_KEY` – For news aggregation (see `.env.template`)

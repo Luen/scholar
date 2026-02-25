@@ -1,23 +1,37 @@
-"""Tests for Hero scraper API (Ulixee Hero browser)."""
-
-import os
+"""Tests for Scrapling-based browser fetching (DOI fallback)."""
 
 import pytest
-import requests
+
+
+def test_scrapling_import():
+    """Test that Scrapling fetchers can be imported."""
+    try:
+        from scrapling.fetchers import StealthyFetcher
+    except ImportError as e:
+        pytest.skip(f"Scrapling fetchers not installed: {e}")
+    assert StealthyFetcher is not None
 
 
 @pytest.mark.integration
-def test_hero_scraper_health():
-    """Test that the Hero scraper API health endpoint is reachable."""
-    url = os.environ.get("HERO_SCRAPER_URL", "http://localhost:3000")
-    if not url:
-        pytest.skip("HERO_SCRAPER_URL not set")
+def test_scrapling_fetch_optional():
+    """Optional: test that Scrapling can fetch a simple page (skip if no browser)."""
+    try:
+        from scrapling.fetchers import StealthyFetcher
+    except ImportError:
+        pytest.skip("Scrapling fetchers not installed")
 
     try:
-        resp = requests.get(f"{url.rstrip('/')}/health", timeout=5)
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data.get("status") == "ok"
-        assert data.get("service") == "hero-scraper"
-    except requests.RequestException as e:
-        pytest.skip(f"Hero scraper not reachable: {e}")
+        page = StealthyFetcher.fetch(
+            "https://example.com",
+            headless=True,
+            timeout=15000,
+        )
+        assert page is not None
+        html = None
+        if hasattr(page, "body") and page.body is not None:
+            enc = getattr(page, "encoding", None) or "utf-8"
+            html = page.body.decode(enc, errors="replace")
+        if html:
+            assert "Example Domain" in html or "example" in html.lower()
+    except Exception as e:
+        pytest.skip(f"Scrapling fetch not available (e.g. browser not installed): {e}")

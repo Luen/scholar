@@ -20,9 +20,6 @@ class Config:
     cache_expire_seconds: int = field(
         default_factory=lambda: int(os.environ.get("CACHE_EXPIRE_SECONDS", 60 * 60 * 24 * 30))
     )
-    hero_scraper_url: str = field(
-        default_factory=lambda: os.environ.get("HERO_SCRAPER_URL", "http://localhost:3000")
-    )
     # Idempotency: skip full fetch if data is fresh within this many seconds (default 7 days)
     fresh_data_seconds: int = field(
         default_factory=lambda: int(os.environ.get("FRESH_DATA_SECONDS", 60 * 60 * 24 * 7))

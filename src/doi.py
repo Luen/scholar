@@ -11,9 +11,6 @@ from googlesearch import search
 
 from .logger import print_error, print_info, print_misc, print_warn
 
-# Hero scraper HTTP API URL (Ulixee Hero browser)
-HERO_SCRAPER_URL = os.environ.get("HERO_SCRAPER_URL", "http://localhost:3000")
-
 # List of websites that block web scrapers
 sites_blocking_scrappers = ["www.sciencedirect.com", "journals.biologists.com"]
 
@@ -30,9 +27,9 @@ def get_url_content(url):
     else:
         html = None
     if html is None:
-        print_misc(f"Trying to fetch content via Hero browser {url}")
+        print_misc(f"Trying to fetch content via Scrapling (headless browser) {url}")
         time.sleep(10)
-        html = get_url_content_using_browser(url)
+        html = get_url_content_using_scrapling(url)
     if html is None:
         print_error(f"Failed to fetch content for {url}")
         return None
@@ -177,9 +174,26 @@ def get_url_content_using_requests(url):
         return None
 
 
+def _get_html_from_scrapling_response(page) -> str | None:
+    """Extract raw HTML string from a Scrapling fetcher response."""
+    try:
+        if hasattr(page, "body") and page.body is not None:
+            encoding = getattr(page, "encoding", None) or "utf-8"
+            return page.body.decode(encoding, errors="replace")
+        if hasattr(page, "html"):
+            return page.html
+        if hasattr(page, "root") and page.root is not None:
+            from lxml import etree
+
+            return etree.tostring(page.root, encoding="unicode", method="html")
+    except Exception:
+        pass
+    return None
+
+
 @lru_cache(maxsize=1000)
-def get_url_content_using_browser(url):
-    """Fetch the HTML content using Ulixee Hero via the hero-scraper HTTP API."""
+def get_url_content_using_scrapling(url):
+    """Fetch the HTML content using Scrapling (headless browser) when requests fails."""
 
     domain = urlparse(url).hostname
     if domain in last_scraped and time.time() - last_scraped[domain] < 30:
@@ -199,15 +213,21 @@ def get_url_content_using_browser(url):
                 print_error(f"Error downloading PDF: {e}")
                 return None
 
-        scrape_url = f"{HERO_SCRAPER_URL.rstrip('/')}/scrape"
-        resp = requests.post(scrape_url, json={"url": url}, timeout=90)
-        resp.raise_for_status()
-        return resp.text
-    except requests.RequestException as e:
-        print_misc(f"[ERROR] Hero scraper request failed: {e}")
-        return None
+        try:
+            from scrapling.fetchers import StealthyFetcher
+
+            page = StealthyFetcher.fetch(url, headless=True, timeout=60000)
+            html = _get_html_from_scrapling_response(page)
+            if html:
+                return html
+        except ImportError:
+            print_misc("[ERROR] Scrapling fetchers not available; run: pip install scrapling[fetchers]")
+            return None
+        except Exception as e:
+            print_misc(f"[ERROR] Scrapling fetch failed: {e}")
+            return None
     except Exception as e:
-        print_misc(f"[ERROR] An error occurred in get_url_content_using_browser: {e}")
+        print_misc(f"[ERROR] An error occurred in get_url_content_using_scrapling: {e}")
         return None
 
 

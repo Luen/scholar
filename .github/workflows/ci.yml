@@ -46,6 +46,3 @@ jobs:
 
       - name: Run tests
         run: pytest tests/
-        env:
-          # Tests that need Hero/credentials will skip if unavailable
-          HERO_SCRAPER_URL: ""

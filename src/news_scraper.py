@@ -605,6 +605,89 @@ def fetch_rss_feed(
         return []
 
 
+# News site base URLs for Newspaper4k source discovery (build + parse articles)
+NEWSPAPER4K_SOURCE_URLS = [
+    "https://www.abc.net.au/news",
+    "https://www.jcu.edu.au/news",
+    "https://www.aims.gov.au",
+    "https://cosmosmagazine.com",
+    "https://theconversation.com",
+]
+NEWSPAPER4K_ARTICLES_PER_SOURCE = 15
+NEWSPAPER4K_NUMBER_THREADS = 2
+
+
+def fetch_newspaper4k_articles() -> list[MediaItem]:
+    """Discover and parse articles from news sources using Newspaper4k."""
+    try:
+        import newspaper
+    except ImportError:
+        logger.warning("newspaper4k not installed; skip Newspaper4k sources")
+        return []
+
+    articles: list[MediaItem] = []
+    for source_url in NEWSPAPER4K_SOURCE_URLS:
+        try:
+            source_name = urlparse(source_url).netloc or source_url
+            paper = newspaper.build(
+                source_url,
+                language="en",
+                number_threads=NEWSPAPER4K_NUMBER_THREADS,
+            )
+            paper.build()  # populate article list from front page / categories / RSS
+            for art in paper.articles[:NEWSPAPER4K_ARTICLES_PER_SOURCE]:
+                try:
+                    art.download()
+                    art.parse()
+                    if not getattr(art, "title", None) and not getattr(art, "text", None):
+                        continue
+                    content = (art.text or "")[:5000]
+                    title = (art.title or "").strip()
+                    description = (
+                        (art.summary or art.text or "")[:500].strip() if art.text else ""
+                    )
+                    matching_keywords = does_article_mention_keywords(
+                        content, title, description
+                    )
+                    if not matching_keywords and not does_article_mention_rummer(
+                        content, title, description
+                    ):
+                        continue
+                    if not matching_keywords:
+                        matching_keywords = {"marine/science"}
+                    date_val = getattr(art, "publish_date", None)
+                    date_str = (
+                        date_val.isoformat()
+                        if date_val is not None
+                        else None
+                    )
+                    media_item: MediaItem = {
+                        "type": "article",
+                        "source": f"{source_name} (Newspaper4k)",
+                        "title": strip_html(title),
+                        "description": strip_html(description),
+                        "url": art.url,
+                        "date": standardize_date(date_str),
+                        "sourceType": "Other",
+                        "keywords": list(matching_keywords),
+                    }
+                    if getattr(art, "top_image", None):
+                        media_item["image"] = {
+                            "url": art.top_image,
+                            "alt": strip_html(title),
+                        }
+                    else:
+                        media_item["image"] = None
+                    articles.append(media_item)
+                except Exception as e:
+                    logger.debug(f"Newspaper4k parse skip {getattr(art, 'url', '')}: {e}")
+                time.sleep(0.5)
+            time.sleep(1)
+        except Exception as e:
+            logger.error(f"Error building Newspaper4k source {source_url}: {e}")
+    return articles
+
+
 def fetch_guardian_articles() -> list[MediaItem]:
     api_key = os.getenv("THE_GUARDIAN_API_KEY")
     if not api_key:
@@ -670,6 +753,67 @@ def fetch_guardian_articles() -> list[MediaItem]:
         return articles
     except Exception as e:
         logger.error(f"Error fetching Guardian articles: {str(e)}")
+        return []
+
+
+# GNews (Google News API) config: country AU, English, last 7 days
+GNEWS_MAX_RESULTS = 50
+GNEWS_PERIOD = "7d"
+
+
+def fetch_gnews_articles() -> list[MediaItem]:
+    """Fetch articles from Google News via the GNews package (keeps RSS Google News as well)."""
+    try:
+        from gnews import GNews
+    except ImportError:
+        logger.warning("gnews not installed; skip GNews source")
+        return []
+
+    articles: list[MediaItem] = []
+    try:
+        google_news = GNews(
+            language="en",
+            country="AU",
+            period=GNEWS_PERIOD,
+            max_results=GNEWS_MAX_RESULTS,
+        )
+        # Query with main Rummer / lab terms (same theme as the existing Google News RSS)
+        query = "Jodie Rummer OR RummerLab OR Physioshark OR marine biology JCU"
+        raw = google_news.get_news(query)
+        if not raw:
+            return articles
+        for item in raw:
+            title = (item.get("title") or "").strip()
+            description = (item.get("description") or "").strip()
+            url = (item.get("url") or "").strip()
+            if not url or not title:
+                continue
+            published = item.get("published date") or item.get("published_date") or ""
+            matching_keywords = does_article_mention_keywords(
+                description, title, ""
+            )
+            if not matching_keywords and not does_article_mention_rummer(
+                description, title, ""
+            ):
+                continue
+            if not matching_keywords:
+                matching_keywords = {"marine/science"}
+            publisher = (item.get("publisher") or "GNews").strip()
+            media_item: MediaItem = {
+                "type": "article",
+                "source": "GNews",
+                "title": strip_html(title),
+                "description": strip_html(description) or (f"Source: {publisher}" if publisher else ""),
+                "url": url,
+                "date": standardize_date(published),
+                "sourceType": "GNews",
+                "keywords": list(matching_keywords),
+            }
+            media_item["image"] = None
+            articles.append(media_item)
+        return articles
+    except Exception as e:
+        logger.error(f"Error fetching GNews articles: {e}")
         return []
 
 
@@ -869,6 +1013,22 @@ def fetch_all_news() -> list[MediaItem]:
     except Exception as e:
         logger.error(f"Error in Google Search: {str(e)}")
 
+    # Add GNews (Google News via GNews package; RSS Google News is kept above)
+    try:
+        articles = fetch_gnews_articles()
+        all_articles.extend(articles)
+        time.sleep(1)
+    except Exception as e:
+        logger.error(f"Error fetching GNews articles: {str(e)}")
+
+    # Add Newspaper4k-discovered articles
+    try:
+        articles = fetch_newspaper4k_articles()
+        all_articles.extend(articles)
+        time.sleep(1)
+    except Exception as e:
+        logger.error(f"Error fetching Newspaper4k articles: {str(e)}")
+
     # Add web scraping results
     news_sites = [
         "https://www.townsvillebulletin.com.au/news/townsville",
@@ -925,9 +1085,11 @@ def fetch_all_news() -> list[MediaItem]:
         "Oceanic Society": 9,
         "Oceanographic Magazine": 10,
         "Google News": 11,
-        "NewsAPI": 12,
+        "GNews": 12,
+        "NewsAPI": 13,
+        "Newspaper4k": 14,
     }
-    default_priority = 13
+    default_priority = 15
 
     def normalize_title(t: str) -> str:
         t = t.lower()

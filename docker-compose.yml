@@ -9,47 +9,6 @@ services:
     command: ["true"]
     restart: "no"
 
-  hero:
-    build:
-      context: ./hero
-      dockerfile: hero/Dockerfile
-    image: scholar-hero:latest
-    container_name: scholar_hero
-    init: true
-    ipc: host
-    ports:
-      - "1818:1818"
-    environment:
-      - DISPLAY=:99
-    volumes:
-      - hero_datastores:/home/ulixee/.cache/ulixee/datastores
-      - hero_data:/tmp/.ulixee
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "3"
-    restart: unless-stopped
-
-  hero-scraper:
-    build:
-      context: ./hero-scraper
-      dockerfile: hero-scraper/Dockerfile
-    container_name: scholar_hero_scraper
-    environment:
-      - HERO_CORE_HOST=hero:1818
-      - PORT=3000
-    ports:
-      - "8002:3000"
-    depends_on:
-      - hero
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    restart: unless-stopped
-
   web:
     build:
       context: .
@@ -58,7 +17,6 @@ services:
     env_file: .env
     environment:
       - PYTHONUNBUFFERED=1
-      - HERO_SCRAPER_URL=http://hero-scraper:3000
       - NEWS_API_ORG_KEY=${NEWS_API_ORG_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GOOGLE_CX_ID=${GOOGLE_CX_ID}
@@ -90,7 +48,6 @@ services:
     env_file: .env
     environment:
       - PYTHONUNBUFFERED=1
-      - HERO_SCRAPER_URL=http://hero-scraper:3000
       - NEWS_API_ORG_KEY=${NEWS_API_ORG_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GOOGLE_CX_ID=${GOOGLE_CX_ID}
@@ -109,12 +66,8 @@ services:
     depends_on:
       web:
         condition: service_healthy
-      hero-scraper:
-        condition: service_started
 
 volumes:
   scholar_data:
   cache:
   downloaded_files:
-  hero_datastores:
-  hero_data:

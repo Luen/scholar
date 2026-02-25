@@ -2,7 +2,7 @@
 Configure requests-cache for HTTP response caching.
 
 Must be imported before any code that uses requests or scholarly,
-so that all HTTP traffic (DOI APIs, Hero scraper, scholarly, etc.) is cached.
+so that all HTTP traffic (DOI APIs, Scrapling, scholarly, etc.) is cached.
 """
 
 import os
