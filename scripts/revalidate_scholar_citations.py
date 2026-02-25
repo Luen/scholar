@@ -15,7 +15,7 @@ _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _root)
 
 import src.cache_config  # noqa: E402, F401
-from src.doi_metrics import (  # noqa: E402
+from src.scholar_citations import (  # noqa: E402
     fetch_altmetric_score,
     fetch_google_scholar_citations,
     list_cached_successful_dois,

@@ -6,7 +6,7 @@ from flask import Flask, jsonify, send_from_directory
 
 import src.cache_config  # noqa: F401 - configure HTTP cache before requests
 
-from .doi_metrics import (
+from .scholar_citations import (
     fetch_altmetric_score,
     fetch_google_scholar_citations,
 )

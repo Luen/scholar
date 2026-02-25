@@ -103,6 +103,50 @@ def _write_cache(path: str, value: dict, doi: str = "") -> None:
         logger.warning("Failed to write DOI metrics cache: %s", e)
 
 
+def _parse_scholar_citations(soup: BeautifulSoup) -> tuple[int | None, bool]:
+    """
+    Extract citation count from a Scholar results page.
+    Returns (citations, no_results): no_results is True when the page says
+    "did not match any articles".
+    """
+    citations: int | None = None
+    for a in soup.find_all("a", href=True):
+        text = a.get_text(strip=True)
+        if text.startswith("Cited by"):
+            m = re.search(r"Cited by (\d+)", text)
+            if m:
+                try:
+                    citations = int(m.group(1))
+                    break
+                except ValueError:
+                    pass
+
+    no_results = "did not match any articles" in soup.get_text()
+    return citations, no_results
+
+
+def _scholar_search(
+    query: str, headers: dict, proxies: dict
+) -> tuple[int | None, bool] | None:
+    """
+    Run one Google Scholar search and parse the result.
+    Returns (citations, no_results) on success, or None if the request failed or was blocked.
+    """
+    url = f"{GOOGLE_SCHOLAR_BASE}?hl=en&as_sdt=0%2C5&q={quote(query)}&btnG="
+    try:
+        resp = requests.get(url, headers=headers, timeout=30, proxies=proxies)
+    except requests.RequestException:
+        raise
+    if not resp.ok:
+        logger.warning("Google Scholar search failed (%s) for query: %.60s", resp.status_code, query)
+        return None
+    if _is_blocked_response(resp.text, resp.url or url):
+        logger.warning("Google Scholar appears to be blocking requests (CAPTCHA/IP block)")
+        return None
+    soup = BeautifulSoup(resp.text, "html.parser")
+    return _parse_scholar_citations(soup)
+
+
 def _is_blocked_response(html: str, url: str) -> bool:
     """Detect if Google Scholar has blocked the request."""
     lower = html.lower()
@@ -174,8 +218,8 @@ class ScholarCitationsResult:
 def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> ScholarCitationsResult:
     """
     Fetch Google Scholar citation count for a DOI. Cached for 2 weeks.
+    Searches by DOI first; if that returns no results, searches by publication title.
     Returns found=False (401) if Crossref does not list Rummer, Bergseth, or Wu.
-    Uses Crossref first to verify authors; no page-content author check after fetch.
     """
     path = _cache_path(doi, "scholar")
     cached, expired = _read_cache(path)
@@ -186,13 +230,12 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
             found=cached.get("found", True),
         )
 
-    # Crossref first: verify allowed author before fetching
+    # Crossref first: verify allowed author and get title for fallback
     crossref = fetch_crossref_details(doi)
     if not crossref or not _authors_contain_allowed(crossref.authors):
         _write_cache(path, {"found": False, "citations": None}, doi=doi)
         return ScholarCitationsResult(doi=doi, citations=None, found=False)
 
-    search_url = f"{GOOGLE_SCHOLAR_BASE}?hl=en&as_sdt=0%2C5&q={quote(doi)}&btnG="
     headers = {
         "User-Agent": USER_AGENT,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -202,14 +245,10 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
 
     try:
         proxies = get_socks5_proxies()
-        resp = requests.get(
-            search_url, headers=headers, timeout=30, proxies=proxies
-        )
-        html = resp.text
-        final_url = resp.url or search_url
 
-        if not resp.ok:
-            logger.warning("Google Scholar search failed (%s) for DOI %s", resp.status_code, doi)
+        # 1. Search by DOI
+        result = _scholar_search(doi, headers, proxies)
+        if result is None:
             if cached is not None:
                 return ScholarCitationsResult(
                     doi=doi,
@@ -218,29 +257,19 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
                 )
             return ScholarCitationsResult(doi=doi, citations=None, found=True)
 
-        if _is_blocked_response(html, final_url):
-            logger.warning("Google Scholar appears to be blocking requests (CAPTCHA/IP block)")
-            if cached is not None:
-                return ScholarCitationsResult(
-                    doi=doi,
-                    citations=cached.get("citations"),
-                    found=cached.get("found", True),
-                )
-            return ScholarCitationsResult(doi=doi, citations=None, found=True)
+        citations, no_results = result
 
-        soup = BeautifulSoup(html, "html.parser")
-        citations: int | None = None
-
-        for a in soup.find_all("a", href=True):
-            text = a.get_text(strip=True)
-            if text.startswith("Cited by"):
-                m = re.search(r"Cited by (\d+)", text)
-                if m:
-                    try:
-                        citations = int(m.group(1))
-                        break
-                    except ValueError:
-                        pass
+        # 2. If DOI search had no results, search by publication title
+        if citations is None and no_results and crossref.title:
+            title_query = crossref.title.strip()
+            if title_query:
+                title_result = _scholar_search(title_query, headers, proxies)
+                if title_result is not None and title_result[0] is not None:
+                    citations = title_result[0]
+                    logger.info(
+                        "Scholar DOI search had no results; got citations via title: %.60s",
+                        title_query,
+                    )
 
         _write_cache(path, {"found": True, "citations": citations}, doi=doi)
         return ScholarCitationsResult(doi=doi, citations=citations, found=True)
