@@ -18,11 +18,10 @@ from typing import Any
 from urllib.parse import quote
 
 import requests
-
-from .doi_utils import normalize_doi
 import requests_cache
 from bs4 import BeautifulSoup
 
+from .doi_utils import normalize_doi
 from .logger import print_warn
 from .proxy_config import get_socks5_proxies
 
@@ -118,9 +117,7 @@ def _parse_embed_response(data: dict[str, Any]) -> AltmetricEmbedResponse:
         cited_by_msm_count=_coerce_int(data.get("cited_by_msm_count")),
         cited_by_bluesky_count=_coerce_int(data.get("cited_by_bluesky_count")),
         cited_by_tweeters_count=_coerce_int(data.get("cited_by_tweeters_count")),
-        cited_by_peer_review_sites_count=_coerce_int(
-            data.get("cited_by_peer_review_sites_count")
-        ),
+        cited_by_peer_review_sites_count=_coerce_int(data.get("cited_by_peer_review_sites_count")),
         readers=readers if isinstance(readers, dict) else None,
     )
 
@@ -135,14 +132,10 @@ def _fetch_altmetric_embed(altmetric_id: str) -> AltmetricEmbedResponse | None:
     }
     try:
         proxies = get_socks5_proxies()
-        resp = _altmetric_embed_session.get(
-            url, headers=headers, timeout=30, proxies=proxies
-        )
+        resp = _altmetric_embed_session.get(url, headers=headers, timeout=30, proxies=proxies)
         resp.raise_for_status()
         body = resp.text.strip()
-        json_str = body.replace("_altmetric.embed_callback(", "").rstrip(");").rstrip(
-            ";"
-        )
+        json_str = body.replace("_altmetric.embed_callback(", "").rstrip(");").rstrip(";")
         data = json.loads(json_str)
         return _parse_embed_response(data)
     except requests.RequestException as e:
@@ -287,16 +280,30 @@ def fetch_altmetric_details(doi: str) -> ScrapedAltmetricDetails | None:
                 embed_data = _fetch_altmetric_embed(altmetric_id)
                 if embed_data:
                     p = panel or {}
-                    p["score"] = embed_data.score if embed_data.score is not None else p.get("score")
+                    p["score"] = (
+                        embed_data.score if embed_data.score is not None else p.get("score")
+                    )
                     p["cited_by_posts_count"] = embed_data.cited_by_posts_count
                     p["cited_by_accounts_count"] = embed_data.cited_by_accounts_count
                     p["cited_by_msm_count"] = embed_data.cited_by_msm_count
-                    p["cited_by_bluesky_count"] = embed_data.cited_by_bluesky_count if embed_data.cited_by_bluesky_count is not None else p.get("cited_by_bluesky_count")
-                    p["cited_by_tweeters_count"] = embed_data.cited_by_tweeters_count if embed_data.cited_by_tweeters_count is not None else p.get("cited_by_tweeters_count")
-                    p["cited_by_peer_review_sites_count"] = embed_data.cited_by_peer_review_sites_count
+                    p["cited_by_bluesky_count"] = (
+                        embed_data.cited_by_bluesky_count
+                        if embed_data.cited_by_bluesky_count is not None
+                        else p.get("cited_by_bluesky_count")
+                    )
+                    p["cited_by_tweeters_count"] = (
+                        embed_data.cited_by_tweeters_count
+                        if embed_data.cited_by_tweeters_count is not None
+                        else p.get("cited_by_tweeters_count")
+                    )
+                    p["cited_by_peer_review_sites_count"] = (
+                        embed_data.cited_by_peer_review_sites_count
+                    )
                     if embed_data.readers and isinstance(embed_data.readers, dict):
                         mendeley = _coerce_int(embed_data.readers.get("mendeley"))
-                        p["mendeley_readers"] = mendeley if mendeley is not None else p.get("mendeley_readers")
+                        p["mendeley_readers"] = (
+                            mendeley if mendeley is not None else p.get("mendeley_readers")
+                        )
                     panel = p
         else:
             if doi not in _logged_failures:

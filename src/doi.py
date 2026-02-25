@@ -1,5 +1,4 @@
 import io
-import os
 import re
 import time
 from functools import lru_cache
@@ -221,7 +220,9 @@ def get_url_content_using_scrapling(url):
             if html:
                 return html
         except ImportError:
-            print_misc("[ERROR] Scrapling fetchers not available; run: pip install scrapling[fetchers]")
+            print_misc(
+                "[ERROR] Scrapling fetchers not available; run: pip install scrapling[fetchers]"
+            )
             return None
         except Exception as e:
             print_misc(f"[ERROR] Scrapling fetch failed: {e}")

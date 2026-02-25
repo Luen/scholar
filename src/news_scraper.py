@@ -643,12 +643,8 @@ def fetch_newspaper4k_articles() -> list[MediaItem]:
                         continue
                     content = (art.text or "")[:5000]
                     title = (art.title or "").strip()
-                    description = (
-                        (art.summary or art.text or "")[:500].strip() if art.text else ""
-                    )
-                    matching_keywords = does_article_mention_keywords(
-                        content, title, description
-                    )
+                    description = (art.summary or art.text or "")[:500].strip() if art.text else ""
+                    matching_keywords = does_article_mention_keywords(content, title, description)
                     if not matching_keywords and not does_article_mention_rummer(
                         content, title, description
                     ):
@@ -656,11 +652,7 @@ def fetch_newspaper4k_articles() -> list[MediaItem]:
                     if not matching_keywords:
                         matching_keywords = {"marine/science"}
                     date_val = getattr(art, "publish_date", None)
-                    date_str = (
-                        date_val.isoformat()
-                        if date_val is not None
-                        else None
-                    )
+                    date_str = date_val.isoformat() if date_val is not None else None
                     media_item: MediaItem = {
                         "type": "article",
                         "source": f"{source_name} (Newspaper4k)",
@@ -789,12 +781,8 @@ def fetch_gnews_articles() -> list[MediaItem]:
             if not url or not title:
                 continue
             published = item.get("published date") or item.get("published_date") or ""
-            matching_keywords = does_article_mention_keywords(
-                description, title, ""
-            )
-            if not matching_keywords and not does_article_mention_rummer(
-                description, title, ""
-            ):
+            matching_keywords = does_article_mention_keywords(description, title, "")
+            if not matching_keywords and not does_article_mention_rummer(description, title, ""):
                 continue
             if not matching_keywords:
                 matching_keywords = {"marine/science"}
@@ -803,7 +791,8 @@ def fetch_gnews_articles() -> list[MediaItem]:
                 "type": "article",
                 "source": "GNews",
                 "title": strip_html(title),
-                "description": strip_html(description) or (f"Source: {publisher}" if publisher else ""),
+                "description": strip_html(description)
+                or (f"Source: {publisher}" if publisher else ""),
                 "url": url,
                 "date": standardize_date(published),
                 "sourceType": "GNews",

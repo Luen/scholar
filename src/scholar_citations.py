@@ -15,12 +15,11 @@ from datetime import datetime, timedelta
 from urllib.parse import quote
 
 import requests
-
-from .doi_utils import normalize_doi
 from bs4 import BeautifulSoup
 
 from .altmetric import fetch_altmetric_details
 from .crossref import fetch_crossref_details
+from .doi_utils import normalize_doi
 from .proxy_config import get_socks5_proxies
 
 logger = logging.getLogger(__name__)
@@ -130,9 +129,7 @@ def _parse_scholar_citations(soup: BeautifulSoup) -> tuple[int | None, bool]:
     return citations, no_results
 
 
-def _scholar_search(
-    query: str, headers: dict, proxies: dict
-) -> tuple[int | None, bool] | None:
+def _scholar_search(query: str, headers: dict, proxies: dict) -> tuple[int | None, bool] | None:
     """
     Run one Google Scholar search and parse the result.
     Returns (citations, no_results) on success, or None if the request failed or was blocked.
@@ -143,7 +140,9 @@ def _scholar_search(
     except requests.RequestException:
         raise
     if not resp.ok:
-        logger.warning("Google Scholar search failed (%s) for query: %.60s", resp.status_code, query)
+        logger.warning(
+            "Google Scholar search failed (%s) for query: %.60s", resp.status_code, query
+        )
         return None
     if _is_blocked_response(resp.text, resp.url or url):
         logger.warning("Google Scholar appears to be blocking requests (CAPTCHA/IP block)")
