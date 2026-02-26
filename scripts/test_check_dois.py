@@ -29,7 +29,9 @@ def main() -> None:
             continue
         authors = crossref.authors or []
         allowed = _authors_contain_allowed(crossref.authors)
-        status = "PASS (would get Altmetric/GS)" if allowed else "FAIL (401 - author not in allowlist)"
+        status = (
+            "PASS (would get Altmetric/GS)" if allowed else "FAIL (401 - author not in allowlist)"
+        )
 
         def safe(s: str | None) -> str:
             return s.encode("ascii", errors="replace").decode("ascii") if s else ""

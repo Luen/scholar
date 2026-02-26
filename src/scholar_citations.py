@@ -95,9 +95,7 @@ def list_cached_successful_dois() -> set[str]:
     return dois
 
 
-def _write_cache(
-    path: str, value: dict, doi: str = "", cache_seconds: int | None = None
-) -> None:
+def _write_cache(path: str, value: dict, doi: str = "", cache_seconds: int | None = None) -> None:
     now = datetime.now()
     ttl = cache_seconds if cache_seconds is not None else CACHE_SECONDS
     expires = now + timedelta(seconds=ttl)
@@ -139,7 +137,9 @@ def _parse_scholar_citations(soup: BeautifulSoup) -> tuple[int | None, bool]:
     return citations, no_results
 
 
-def _scholar_search(query: str, headers: dict, proxies: dict | None) -> tuple[int | None, bool] | None:
+def _scholar_search(
+    query: str, headers: dict, proxies: dict | None
+) -> tuple[int | None, bool] | None:
     """
     Run one Google Scholar search and parse the result.
     Returns (citations, no_results) on success, or None if the request failed or was blocked.
@@ -161,9 +161,7 @@ def _scholar_search(query: str, headers: dict, proxies: dict | None) -> tuple[in
     return _parse_scholar_citations(soup)
 
 
-def _scholar_search_with_proxy_retries(
-    query: str, headers: dict
-) -> tuple[int | None, bool] | None:
+def _scholar_search_with_proxy_retries(query: str, headers: dict) -> tuple[int | None, bool] | None:
     """
     Try Google Scholar search: Tor proxy first (up to 5 attempts, same proxy),
     then each SOCKS5 proxy in turn. Returns first successful result or None.
@@ -180,9 +178,7 @@ def _scholar_search_with_proxy_retries(
             logger.debug("Scholar search failed with proxy: %s", e)
             continue
     if last_e is not None:
-        logger.warning(
-            "Scholar search failed for all proxies for query %.60s: %s", query, last_e
-        )
+        logger.warning("Scholar search failed for all proxies for query %.60s: %s", query, last_e)
     return None
 
 
@@ -386,9 +382,7 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
 
         now_iso = datetime.now().isoformat()
         _write_cache(path, {"found": True, "citations": citations}, doi=doi)
-        return ScholarCitationsResult(
-            doi=doi, citations=citations, found=True, last_fetch=now_iso
-        )
+        return ScholarCitationsResult(doi=doi, citations=citations, found=True, last_fetch=now_iso)
 
     except requests.RequestException as e:
         logger.warning("Failed to scrape Google Scholar citations for DOI %s: %s", doi, e)
