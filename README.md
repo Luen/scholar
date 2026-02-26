@@ -176,7 +176,8 @@ python server.py
 Or with Docker:
 
 ```bash
-docker compose up web -d
+docker compose up web cron -d --build
+docker compose down; docker volume rm scholar_cache; docker compose up web cron -d --build
 ```
 
 The API is available at `http://localhost:8000` (Docker maps 8000→5000).
