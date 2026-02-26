@@ -32,6 +32,7 @@ GOOGLE_SCHOLAR_BASE = "https://scholar.google.com/scholar"
 
 ALLOWED_AUTHORS = ("Rummer", "Bergseth", "Wu")
 CACHE_SECONDS = 14 * 24 * 60 * 60  # 2 weeks
+CACHE_SECONDS_BLOCKED_OR_WARNING = 24 * 60 * 60  # 1 day when Scholar blocked or request failed
 CACHE_DIR = os.environ.get("DOI_METRICS_CACHE_DIR", "")
 if not CACHE_DIR:
     base = os.environ.get("CACHE_DIR", "cache")
@@ -94,9 +95,12 @@ def list_cached_successful_dois() -> set[str]:
     return dois
 
 
-def _write_cache(path: str, value: dict, doi: str = "") -> None:
+def _write_cache(
+    path: str, value: dict, doi: str = "", cache_seconds: int | None = None
+) -> None:
     now = datetime.now()
-    expires = now + timedelta(seconds=CACHE_SECONDS)
+    ttl = cache_seconds if cache_seconds is not None else CACHE_SECONDS
+    expires = now + timedelta(seconds=ttl)
     data = {
         **value,
         "expires_at": expires.isoformat(),
@@ -227,6 +231,7 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
     Fetch Altmetric data for a DOI. Cached for 2 weeks.
     Returns found=False (401) if Crossref does not list Rummer, Bergseth, or Wu.
     Uses Crossref first to verify authors; no page-content author check after fetch.
+    force_refresh is for dev only (e.g. ?refresh=1); production/cron should not use it.
     """
     doi = normalize_doi(doi)
     path = _cache_path(doi, "altmetric")
@@ -294,6 +299,7 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
     Fetch Google Scholar citation count for a DOI. Cached for 2 weeks.
     Searches by DOI first; if that returns no results, searches by publication title.
     Returns found=False (401) if Crossref does not list Rummer, Bergseth, or Wu.
+    force_refresh is for dev only (e.g. ?refresh=1); production/cron should not use it.
     """
     doi = normalize_doi(doi)
     path = _cache_path(doi, "scholar")
@@ -358,6 +364,7 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
                 path,
                 {"found": True, "citations": None, "warning": warning},
                 doi=doi,
+                cache_seconds=CACHE_SECONDS_BLOCKED_OR_WARNING,
             )
             return ScholarCitationsResult(
                 doi=doi, citations=None, found=True, last_fetch=now_iso, warning=warning
@@ -391,6 +398,7 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
             path,
             {"found": True, "citations": None, "warning": warning},
             doi=doi,
+            cache_seconds=CACHE_SECONDS_BLOCKED_OR_WARNING,
         )
         return ScholarCitationsResult(
             doi=doi, citations=None, found=True, last_fetch=now_iso, warning=warning

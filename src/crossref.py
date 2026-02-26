@@ -176,8 +176,7 @@ def search_doi_by_title(pub_title: str, author_last_name: str) -> str | None:
 def fetch_crossref_details(doi: str, force_refresh: bool = False) -> CrossrefResponse | None:
     """
     Fetch publication metadata and citation count from Crossref API.
-    Responses are cached for 1 month. When force_refresh=True, bypass the cache
-    (e.g. for ?refresh=1 on the API).
+    Responses are cached for 1 month. force_refresh is for dev only (e.g. ?refresh=1).
     """
     doi = normalize_doi(doi)
     try:

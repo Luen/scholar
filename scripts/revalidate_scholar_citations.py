@@ -3,7 +3,9 @@
 Revalidate DOI metrics cache for previously successful requests.
 
 Run weekly via cron (every 7 days) to refresh Altmetric scores and Google Scholar
-citation counts. Only revalidates DOIs that previously returned success.
+citation counts when cache is expired. Only revalidates DOIs that previously
+returned success. Does not use force_refresh so that if we get CAPTCHA/blocked
+we fall back to the existing (possibly expired) cache instead of overwriting it.
 Uses TOR_PROXY first (5 attempts), then SOCKS5_PROXIES (see .env.template).
 """
 
@@ -38,8 +40,8 @@ def main() -> int:
     fail = 0
     for doi in dois:
         try:
-            a = fetch_altmetric_score(doi, force_refresh=True)
-            s = fetch_google_scholar_citations(doi, force_refresh=True)
+            a = fetch_altmetric_score(doi, force_refresh=False)
+            s = fetch_google_scholar_citations(doi, force_refresh=False)
             if a.found or s.found:
                 ok += 1
             else:
