@@ -9,6 +9,7 @@ counts may change. Uses a permanent cache (never expire) for Crossref requests.
 
 import hashlib
 import json
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -19,6 +20,8 @@ import requests_cache
 
 from .doi_utils import normalize_doi
 from .logger import print_warn
+
+logger = logging.getLogger(__name__)
 
 # Crossref metadata does not change; cache forever
 _CACHE_DIR = os.environ.get("CACHE_DIR", "cache")
@@ -169,9 +172,10 @@ def search_doi_by_title(pub_title: str, author_last_name: str) -> str | None:
         return None
 
 
-def fetch_crossref_details(doi: str) -> CrossrefResponse | None:
+def fetch_crossref_details(doi: str, force_refresh: bool = False) -> CrossrefResponse | None:
     """
     Fetch publication metadata and citation count from Crossref API.
+    When force_refresh=True, bypass the permanent cache (e.g. for ?refresh=1 on the API).
     """
     doi = normalize_doi(doi)
     try:
@@ -181,13 +185,23 @@ def fetch_crossref_details(doi: str) -> CrossrefResponse | None:
             "User-Agent": USER_AGENT,
             "Accept": "application/json",
         }
-        resp = _crossref_session.get(url, headers=headers, timeout=30)
+        if force_refresh:
+            resp = requests.get(url, headers=headers, timeout=30)
+        else:
+            resp = _crossref_session.get(url, headers=headers, timeout=30)
         if not resp.ok:
+            logger.warning(
+                "Crossref API failed for DOI %s: HTTP %s %s",
+                doi,
+                resp.status_code,
+                resp.reason or "",
+            )
             return None
 
         data = resp.json()
         message = data.get("message")
         if not message:
+            logger.warning("Crossref API returned no message for DOI %s", doi)
             return None
 
         crossref_authors: list[str] | None = None
@@ -236,6 +250,7 @@ def fetch_crossref_details(doi: str) -> CrossrefResponse | None:
         )
     except (requests.RequestException, KeyError, IndexError, TypeError) as e:
         if doi not in _logged_failures:
+            logger.warning("Failed to fetch Crossref data for DOI %s: %s", doi, e)
             print_warn(f"Failed to fetch Crossref data for DOI {doi}: {e}")
             _logged_failures.add(doi)
         return None

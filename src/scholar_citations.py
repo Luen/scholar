@@ -240,8 +240,19 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
         )
 
     # Crossref first: verify allowed author before fetching
-    crossref = fetch_crossref_details(doi)
+    crossref = fetch_crossref_details(doi, force_refresh=force_refresh)
     if not crossref or not _authors_contain_allowed(crossref.authors):
+        if not crossref:
+            logger.warning(
+                "Altmetric 401 for DOI %s: Crossref returned no metadata (API error or DOI not found)",
+                doi,
+            )
+        else:
+            logger.warning(
+                "Altmetric 401 for DOI %s: author not in allowlist (Rummer/Bergseth/Wu). Crossref authors: %s",
+                doi,
+                (crossref.authors or [])[:10],
+            )
         now_iso = datetime.now().isoformat()
         _write_cache(path, {"found": False, "score": None, "details": None}, doi=doi)
         return AltmetricResult(
@@ -288,8 +299,19 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
         )
 
     # Crossref first: verify allowed author and get title for fallback
-    crossref = fetch_crossref_details(doi)
+    crossref = fetch_crossref_details(doi, force_refresh=force_refresh)
     if not crossref or not _authors_contain_allowed(crossref.authors):
+        if not crossref:
+            logger.warning(
+                "Google Scholar 401 for DOI %s: Crossref returned no metadata (API error or DOI not found)",
+                doi,
+            )
+        else:
+            logger.warning(
+                "Google Scholar 401 for DOI %s: author not in allowlist (Rummer/Bergseth/Wu). Crossref authors: %s",
+                doi,
+                (crossref.authors or [])[:10],
+            )
         now_iso = datetime.now().isoformat()
         _write_cache(path, {"found": False, "citations": None}, doi=doi)
         return ScholarCitationsResult(

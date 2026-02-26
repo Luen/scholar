@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 
@@ -7,6 +8,8 @@ from flask import Flask, jsonify, request, send_from_directory
 import src.cache_config  # noqa: F401 - configure HTTP cache before requests
 
 from .doi_utils import normalize_doi
+
+logger = logging.getLogger(__name__)
 from .scholar_citations import (
     fetch_altmetric_score,
     fetch_google_scholar_citations,
@@ -105,6 +108,10 @@ def get_altmetric(doi: str):
     force_refresh = request.args.get("refresh") == "1"
     result = fetch_altmetric_score(doi, force_refresh=force_refresh)
     if not result.found:
+        logger.warning(
+            "Altmetric API returning 401 for DOI %s (publication not found or author not in allowlist)",
+            doi,
+        )
         return jsonify({"error": "Publication not found or author not in allowlist"}), 401
     data = result.details if result.details else {"doi": result.doi, "score": result.score}
     data = {**data, "last_fetch": result.last_fetch}
@@ -124,6 +131,10 @@ def get_google_citations(doi: str):
     force_refresh = request.args.get("refresh") == "1"
     result = fetch_google_scholar_citations(doi, force_refresh=force_refresh)
     if not result.found:
+        logger.warning(
+            "Google citations API returning 401 for DOI %s (publication not found or author not in allowlist)",
+            doi,
+        )
         return jsonify({"error": "Publication not found or author not in allowlist"}), 401
     return jsonify({
         "doi": result.doi,
