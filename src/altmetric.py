@@ -23,7 +23,7 @@ from bs4 import BeautifulSoup
 
 from .doi_utils import normalize_doi
 from .logger import print_warn
-from .proxy_config import get_socks5_proxies
+from .proxy_config import get_all_socks5_proxies
 
 # Altmetric details: 2-week TTL (bi-weekly updates)
 _CACHE_DIR = os.environ.get("CACHE_DIR", "cache")
@@ -55,6 +55,40 @@ USER_AGENT = (
 ALT_DETAILS_BASE = "https://www.altmetric.com/details/doi"
 
 _logged_failures: set[str] = set()
+
+
+def _get_with_proxy_retries(
+    session: requests.Session,
+    url: str,
+    *,
+    headers: dict[str, str],
+    timeout: int = 30,
+    allow_redirects: bool = True,
+) -> requests.Response:
+    """
+    Try session.get(url, ...) with each SOCKS5 proxy in turn; return first
+    successful response. Raises the last RequestException if all attempts fail.
+    (www.altmetric.com may time out via one proxy but work via another.)
+    """
+    proxies_list = get_all_socks5_proxies()
+    if not proxies_list:
+        proxies_list = [None]
+    last_e: requests.RequestException | None = None
+    for proxies in proxies_list:
+        try:
+            return session.get(
+                url,
+                headers=headers,
+                timeout=timeout,
+                allow_redirects=allow_redirects,
+                proxies=proxies,
+            )
+        except requests.RequestException as e:
+            last_e = e
+            continue
+    if last_e is not None:
+        raise last_e
+    raise requests.RequestException("Altmetric request failed (no proxies tried)")
 
 
 @dataclass
@@ -131,8 +165,13 @@ def _fetch_altmetric_embed(altmetric_id: str) -> AltmetricEmbedResponse | None:
         "Referer": "https://www.altmetric.com/",
     }
     try:
-        proxies = get_socks5_proxies()
-        resp = _altmetric_embed_session.get(url, headers=headers, timeout=30, proxies=proxies)
+        resp = _get_with_proxy_retries(
+            _altmetric_embed_session,
+            url,
+            headers=headers,
+            timeout=30,
+            allow_redirects=False,
+        )
         resp.raise_for_status()
         body = resp.text.strip()
         json_str = body.replace("_altmetric.embed_callback(", "").rstrip(");").rstrip(";")
@@ -217,13 +256,12 @@ def fetch_altmetric_details(doi: str) -> ScrapedAltmetricDetails | None:
     }
 
     try:
-        proxies = get_socks5_proxies()
-        resp = _altmetric_session.get(
+        resp = _get_with_proxy_retries(
+            _altmetric_session,
             details_url,
             headers=headers,
             timeout=30,
             allow_redirects=True,
-            proxies=proxies,
         )
         if resp.ok:
             soup = BeautifulSoup(resp.text, "html.parser")

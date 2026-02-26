@@ -105,6 +105,7 @@ def get_altmetric(doi: str):
     if not result.found:
         return jsonify({"error": "Publication not found or author not in allowlist"}), 401
     data = result.details if result.details else {"doi": result.doi, "score": result.score}
+    data = {**data, "last_fetch": result.last_fetch}
     return jsonify(data)
 
 
@@ -120,7 +121,11 @@ def get_google_citations(doi: str):
     result = fetch_google_scholar_citations(doi)
     if not result.found:
         return jsonify({"error": "Publication not found or author not in allowlist"}), 401
-    return jsonify({"doi": result.doi, "citations": result.citations})
+    return jsonify({
+        "doi": result.doi,
+        "citations": result.citations,
+        "last_fetch": result.last_fetch,
+    })
 
 
 if __name__ == "__main__":

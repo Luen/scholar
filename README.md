@@ -109,6 +109,27 @@ for i, entry in enumerate([p.strip() for p in raw.replace(';', chr(10)).splitlin
 "
 ```
 
+```bash
+docker exec scholar_web python -c "
+import os, requests
+from urllib.parse import quote
+raw = os.environ.get('SOCKS5_PROXIES', '').strip()
+if not raw:
+    print('No SOCKS5_PROXIES set'); exit(0)
+for i, entry in enumerate([p.strip() for p in raw.replace(';', chr(10)).splitlines() if p.strip()]):
+    parts = entry.split('|', 2)
+    if len(parts) < 3:
+        print(f'Proxy {i+1}: invalid format'); continue
+    host_port, user, passw = parts[0].strip(), parts[1].strip(), parts[2].strip()
+    url = 'socks5://' + quote(user, safe='') + ':' + quote(passw, safe='') + '@' + host_port
+    try:
+        r = requests.get('https://www.altmetric.com/details/doi/10.1038/s41586-025-08665-0', proxies={'http': url, 'https': url}, timeout=30)
+        print(f'Proxy {i+1} ({host_port}): OK status={r.status_code}')
+    except Exception as e:
+        print(f'Proxy {i+1} ({host_port}): FAIL - {e}')
+"
+```
+
 ## Project structure
 
 - `main.py` – Orchestration only: loads config, runs pipeline, handles idempotency

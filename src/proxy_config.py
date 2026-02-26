@@ -44,16 +44,34 @@ def _parse_socks5_proxies() -> list[dict[str, str]]:
     return result
 
 
+def _ensure_parsed() -> list[dict[str, str]]:
+    """Parse and cache proxy list; return list (may be empty)."""
+    global _parsed_proxy_list, _proxy_cycle
+    if _parsed_proxy_list is None:
+        _parsed_proxy_list = _parse_socks5_proxies()
+        _proxy_cycle = itertools.cycle(_parsed_proxy_list) if _parsed_proxy_list else None
+    return _parsed_proxy_list
+
+
 def get_socks5_proxies() -> dict[str, str] | None:
     """
     Return the next SOCKS5 proxy dict for use with requests (round-robin).
     Format: {"http": "socks5://user:pass@host:port", "https": "socks5://..."}.
     Returns None if SOCKS5_PROXIES is not set or empty.
     """
-    global _parsed_proxy_list, _proxy_cycle
-    if _parsed_proxy_list is None:
-        _parsed_proxy_list = _parse_socks5_proxies()
-        if not _parsed_proxy_list:
-            return None
-        _proxy_cycle = itertools.cycle(_parsed_proxy_list)
+    global _proxy_cycle
+    proxies_list = _ensure_parsed()
+    if not proxies_list:
+        return None
+    if _proxy_cycle is None:
+        _proxy_cycle = itertools.cycle(proxies_list)
     return next(_proxy_cycle)
+
+
+def get_all_socks5_proxies() -> list[dict[str, str]]:
+    """
+    Return all configured SOCKS5 proxy dicts. Use when you want to try each
+    proxy in turn (e.g. one proxy may time out for www.altmetric.com while
+    another works). Empty list if SOCKS5_PROXIES is not set.
+    """
+    return _ensure_parsed()
