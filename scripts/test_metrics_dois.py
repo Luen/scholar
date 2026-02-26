@@ -11,8 +11,8 @@ from common import DOIS, setup_script
 
 setup_script()
 
-from src.doi_utils import normalize_doi
-from src.scholar_citations import (
+from src.doi_utils import normalize_doi  # noqa: E402
+from src.scholar_citations import (  # noqa: E402
     fetch_altmetric_score,
     fetch_google_scholar_citations,
 )

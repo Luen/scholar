@@ -8,12 +8,12 @@ from flask import Flask, jsonify, request, send_from_directory
 import src.cache_config  # noqa: F401 - configure HTTP cache before requests
 
 from .doi_utils import normalize_doi
-
-logger = logging.getLogger(__name__)
 from .scholar_citations import (
     fetch_altmetric_score,
     fetch_google_scholar_citations,
 )
+
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False  # Preserve key order: doi first, then citations/score

@@ -16,7 +16,7 @@ from common import setup_script
 
 setup_script()
 
-from src.scholar_citations import (
+from src.scholar_citations import (  # noqa: E402
     fetch_altmetric_score,
     fetch_google_scholar_citations,
     list_cached_successful_dois,
