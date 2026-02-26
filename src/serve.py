@@ -112,7 +112,10 @@ def get_altmetric(doi: str):
             "Altmetric API returning 401 for DOI %s (publication not found or author not in allowlist)",
             doi,
         )
-        return jsonify({"error": "Publication not found or author not in allowlist"}), 401
+        body = {"error": "Publication not found or author not in allowlist"}
+        if result.error_reason:
+            body["reason"] = result.error_reason
+        return jsonify(body), 401
     data = result.details if result.details else {"doi": result.doi, "score": result.score}
     data = {**data, "last_fetch": result.last_fetch}
     return jsonify(data)
@@ -135,12 +138,18 @@ def get_google_citations(doi: str):
             "Google citations API returning 401 for DOI %s (publication not found or author not in allowlist)",
             doi,
         )
-        return jsonify({"error": "Publication not found or author not in allowlist"}), 401
-    return jsonify({
+        body = {"error": "Publication not found or author not in allowlist"}
+        if result.error_reason:
+            body["reason"] = result.error_reason
+        return jsonify(body), 401
+    data = {
         "doi": result.doi,
         "citations": result.citations,
         "last_fetch": result.last_fetch,
-    })
+    }
+    if result.warning:
+        data["warning"] = result.warning
+    return jsonify(data)
 
 
 if __name__ == "__main__":

@@ -219,6 +219,7 @@ class AltmetricResult:
     found: bool  # True if authors validated
     details: dict | None = None  # Full Altmetric data for API response
     last_fetch: str | None = None  # ISO timestamp when data was last fetched
+    error_reason: str | None = None  # When found=False: why (for API JSON)
 
 
 def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricResult:
@@ -237,26 +238,31 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
             found=cached.get("found", True),
             details=cached.get("details"),
             last_fetch=_last_fetch_from_cache(cached, path),
+            error_reason=cached.get("error_reason"),
         )
 
     # Crossref first: verify allowed author before fetching
     crossref = fetch_crossref_details(doi, force_refresh=force_refresh)
     if not crossref or not _authors_contain_allowed(crossref.authors):
         if not crossref:
-            logger.warning(
-                "Altmetric 401 for DOI %s: Crossref returned no metadata (API error or DOI not found)",
-                doi,
-            )
+            reason = "Crossref returned no metadata (API error or DOI not found)"
+            logger.warning("Altmetric 401 for DOI %s: %s", doi, reason)
         else:
+            reason = "Author not in allowlist (Rummer, Bergseth, or Wu required)"
             logger.warning(
-                "Altmetric 401 for DOI %s: author not in allowlist (Rummer/Bergseth/Wu). Crossref authors: %s",
+                "Altmetric 401 for DOI %s: %s. Crossref authors: %s",
                 doi,
+                reason,
                 (crossref.authors or [])[:10],
             )
         now_iso = datetime.now().isoformat()
-        _write_cache(path, {"found": False, "score": None, "details": None}, doi=doi)
+        _write_cache(
+            path,
+            {"found": False, "score": None, "details": None, "error_reason": reason},
+            doi=doi,
+        )
         return AltmetricResult(
-            doi=doi, score=None, found=False, details=None, last_fetch=now_iso
+            doi=doi, score=None, found=False, details=None, last_fetch=now_iso, error_reason=reason
         )
 
     details = fetch_altmetric_details(doi)
@@ -279,6 +285,8 @@ class ScholarCitationsResult:
     citations: int | None
     found: bool
     last_fetch: str | None = None  # ISO timestamp when data was last fetched
+    error_reason: str | None = None  # When found=False: why (for API JSON)
+    warning: str | None = None  # When found=True but citations=None: e.g. Scholar blocked
 
 
 def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> ScholarCitationsResult:
@@ -296,26 +304,32 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
             citations=cached.get("citations"),
             found=cached.get("found", True),
             last_fetch=_last_fetch_from_cache(cached, path),
+            error_reason=cached.get("error_reason"),
+            warning=cached.get("warning"),
         )
 
     # Crossref first: verify allowed author and get title for fallback
     crossref = fetch_crossref_details(doi, force_refresh=force_refresh)
     if not crossref or not _authors_contain_allowed(crossref.authors):
         if not crossref:
-            logger.warning(
-                "Google Scholar 401 for DOI %s: Crossref returned no metadata (API error or DOI not found)",
-                doi,
-            )
+            reason = "Crossref returned no metadata (API error or DOI not found)"
+            logger.warning("Google Scholar 401 for DOI %s: %s", doi, reason)
         else:
+            reason = "Author not in allowlist (Rummer, Bergseth, or Wu required)"
             logger.warning(
-                "Google Scholar 401 for DOI %s: author not in allowlist (Rummer/Bergseth/Wu). Crossref authors: %s",
+                "Google Scholar 401 for DOI %s: %s. Crossref authors: %s",
                 doi,
+                reason,
                 (crossref.authors or [])[:10],
             )
         now_iso = datetime.now().isoformat()
-        _write_cache(path, {"found": False, "citations": None}, doi=doi)
+        _write_cache(
+            path,
+            {"found": False, "citations": None, "error_reason": reason},
+            doi=doi,
+        )
         return ScholarCitationsResult(
-            doi=doi, citations=None, found=False, last_fetch=now_iso
+            doi=doi, citations=None, found=False, last_fetch=now_iso, error_reason=reason
         )
 
     headers = {
@@ -330,17 +344,23 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
         result = _scholar_search_with_proxy_retries(doi, headers)
         if result is None:
             # Scholar blocked on all proxies; Crossref already passed so found=True
+            warning = "Google Scholar blocked requests on all proxies (CAPTCHA/IP block)"
             if cached is not None and cached.get("found", True):
                 return ScholarCitationsResult(
                     doi=doi,
                     citations=cached.get("citations"),
                     found=True,
                     last_fetch=_last_fetch_from_cache(cached, path),
+                    warning=cached.get("warning") or warning,
                 )
             now_iso = datetime.now().isoformat()
-            _write_cache(path, {"found": True, "citations": None}, doi=doi)
+            _write_cache(
+                path,
+                {"found": True, "citations": None, "warning": warning},
+                doi=doi,
+            )
             return ScholarCitationsResult(
-                doi=doi, citations=None, found=True, last_fetch=now_iso
+                doi=doi, citations=None, found=True, last_fetch=now_iso, warning=warning
             )
 
         citations, no_results = result
@@ -366,7 +386,12 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
     except requests.RequestException as e:
         logger.warning("Failed to scrape Google Scholar citations for DOI %s: %s", doi, e)
         now_iso = datetime.now().isoformat()
-        _write_cache(path, {"found": True, "citations": None}, doi=doi)
+        warning = "Google Scholar request failed (network or proxy error)"
+        _write_cache(
+            path,
+            {"found": True, "citations": None, "warning": warning},
+            doi=doi,
+        )
         return ScholarCitationsResult(
-            doi=doi, citations=None, found=True, last_fetch=now_iso
+            doi=doi, citations=None, found=True, last_fetch=now_iso, warning=warning
         )
