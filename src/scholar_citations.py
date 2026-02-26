@@ -20,7 +20,7 @@ from bs4 import BeautifulSoup
 from .altmetric import fetch_altmetric_details
 from .crossref import fetch_crossref_details
 from .doi_utils import normalize_doi
-from .proxy_config import get_all_socks5_proxies
+from .proxy_config import get_request_proxy_chain
 
 logger = logging.getLogger(__name__)
 
@@ -161,12 +161,10 @@ def _scholar_search_with_proxy_retries(
     query: str, headers: dict
 ) -> tuple[int | None, bool] | None:
     """
-    Try Google Scholar search with each proxy in turn. If one proxy is offline or
-    blocked, retry with the next. Returns first successful result or None.
+    Try Google Scholar search: Tor proxy first (up to 5 attempts, same proxy),
+    then each SOCKS5 proxy in turn. Returns first successful result or None.
     """
-    proxies_list = get_all_socks5_proxies()
-    if not proxies_list:
-        proxies_list = [None]
+    proxies_list = get_request_proxy_chain()
     last_e: requests.RequestException | None = None
     for proxies in proxies_list:
         try:

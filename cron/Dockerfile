@@ -20,7 +20,7 @@ RUN touch /var/log/app.log \
     && chown -R app_user:app_user /app/logs \
     && printf '%s\n%s\n' \
         "0 0 */14 * * cd /app && python main.py ynWS968AAAAJ >> /var/log/app.log 2>&1 && python main.py g9B1IoQAAAAJ >> /var/log/app.log 2>&1 && python main.py cXDRggIAAAAJ >> /var/log/app.log 2>&1" \
-        "0 2 */14 * * cd /app && python scripts/revalidate_scholar_citations.py >> /var/log/app.log 2>&1" \
+        "0 2 * * 0 cd /app && python scripts/revalidate_scholar_citations.py >> /var/log/app.log 2>&1" \
         > /etc/cron.d/scholar_cron \
     && chmod 0644 /etc/cron.d/scholar_cron \
     && crontab -u app_user /etc/cron.d/scholar_cron

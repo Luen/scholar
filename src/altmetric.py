@@ -23,7 +23,7 @@ from bs4 import BeautifulSoup
 
 from .doi_utils import normalize_doi
 from .logger import print_warn
-from .proxy_config import get_all_socks5_proxies
+from .proxy_config import get_request_proxy_chain
 
 # Altmetric details: 2-week TTL (bi-weekly updates)
 _CACHE_DIR = os.environ.get("CACHE_DIR", "cache")
@@ -66,13 +66,11 @@ def _get_with_proxy_retries(
     allow_redirects: bool = True,
 ) -> requests.Response:
     """
-    Try session.get(url, ...) with each SOCKS5 proxy in turn; return first
-    successful response. Raises the last RequestException if all attempts fail.
-    (www.altmetric.com may time out via one proxy but work via another.)
+    Try session.get(url, ...) with Tor proxy first (up to 5 attempts), then
+    each SOCKS5 proxy in turn; return first successful response. Raises the
+    last RequestException if all attempts fail.
     """
-    proxies_list = get_all_socks5_proxies()
-    if not proxies_list:
-        proxies_list = [None]
+    proxies_list = get_request_proxy_chain()
     last_e: requests.RequestException | None = None
     for proxies in proxies_list:
         try:

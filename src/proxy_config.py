@@ -1,17 +1,24 @@
 """
-SOCKS5 proxy configuration for outgoing requests (Altmetric, Google Scholar).
+Proxy configuration for outgoing requests (Altmetric, Google Scholar).
 
-Reads SOCKS5_PROXIES from environment. Format: one proxy per line (or semicolon-
-separated). Each entry: host:port|username|password (password may contain |).
-Example:
-  SOCKS5_PROXIES="host1:1080|user1|pass1
-  host2:1080|user2|pass2"
+- TOR_PROXY: HTTP proxy URL (e.g. http://localhost:3128). Used first; on block
+  we retry with the same Tor proxy up to 5 times (Tor handles IP rotation), then
+  fall back to SOCKS5_PROXIES.
+- SOCKS5_PROXIES: Format: one proxy per line (or semicolon-separated). Each
+  entry: host:port|username|password (password may contain |).
 """
 
 import itertools
 import os
 from urllib.parse import quote
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+_TOR_PROXY_RAW = os.environ.get("TOR_PROXY", "").strip()
 _SOCKS5_PROXIES_RAW = os.environ.get("SOCKS5_PROXIES", "").strip()
 _parsed_proxy_list: list[dict[str, str]] | None = None
 _proxy_cycle: itertools.cycle | None = None
@@ -75,3 +82,33 @@ def get_all_socks5_proxies() -> list[dict[str, str]]:
     another works). Empty list if SOCKS5_PROXIES is not set.
     """
     return _ensure_parsed()
+
+
+def get_tor_proxy() -> dict[str, str] | None:
+    """
+    Return requests-style proxy dict for TOR_PROXY (HTTP).
+    Format: {"http": "http://host:port", "https": "http://host:port"}.
+    Returns None if TOR_PROXY is not set or empty.
+    """
+    if not _TOR_PROXY_RAW:
+        return None
+    url = _TOR_PROXY_RAW.rstrip("/")
+    return {"http": url, "https": url}
+
+
+def get_request_proxy_chain() -> list[dict[str, str] | None]:
+    """
+    Proxy chain for retries: try Tor first (same proxy up to 5 times, as the
+    Tor proxy handles IP rotation), then each SOCKS5 proxy in turn.
+    Returns a list of proxy dicts (or None for no proxy). Callers should try
+    each entry in order; on block/failure try the next.
+    """
+    chain: list[dict[str, str] | None] = []
+    tor = get_tor_proxy()
+    if tor:
+        chain.extend([tor] * 5)
+    socks5 = get_all_socks5_proxies()
+    chain.extend(socks5)
+    if not chain:
+        return [None]
+    return chain

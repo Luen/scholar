@@ -7,38 +7,18 @@ This script fetches Crossref metadata for each DOI and reports whether it would
 pass the allowlist and what authors Crossref returns.
 """
 
-import os
 import sys
 
-# Allow importing from project root
-_script_dir = os.path.dirname(os.path.abspath(__file__))
-_project_root = os.path.dirname(_script_dir)
-sys.path.insert(0, _project_root)
+from common import DOIS, setup_script
 
-import src.cache_config  # noqa: E402, F401
-from src.crossref import fetch_crossref_details  # noqa: E402
-from src.doi_utils import normalize_doi  # noqa: E402
-from src.scholar_citations import ALLOWED_AUTHORS, _authors_contain_allowed  # noqa: E402
+setup_script()
 
-DOIS = [
-    "10.7717/peerj.20222",
-    "10.1016/j.tree.2023.12.004",
-    "10.1111/cobi.14390",
-    "10.1655/0018-0831-77.1.37",
-    "10.1093/conphys/coaa138",
-    "10.7717/peerj.3805",
-    "10.1098/rsif.2018.0276",
-    "10.5268/IW-3.3.550",
-    "10.1242/jeb.113803",
-    "10.1111/gcb.15127",
-    "10.1038/s41598-022-09950-y",
-    "10.1242/jeb.192245",
-    "10.1093/conphys/coaf038",
-    "10.1038/s41586-025-08665-0",
-]
+from src.crossref import fetch_crossref_details
+from src.doi_utils import normalize_doi
+from src.scholar_citations import ALLOWED_AUTHORS, _authors_contain_allowed
 
 
-def main():
+def main() -> None:
     print("Allowed author names for API:", ALLOWED_AUTHORS)
     print()
     for raw_doi in DOIS:
@@ -52,7 +32,8 @@ def main():
         authors = crossref.authors or []
         allowed = _authors_contain_allowed(crossref.authors)
         status = "PASS (would get Altmetric/GS)" if allowed else "FAIL (401 - author not in allowlist)"
-        def safe(s):
+
+        def safe(s: str | None) -> str:
             return s.encode("ascii", errors="replace").decode("ascii") if s else ""
 
         title_safe = safe((crossref.title or "")[:70]) + "..."

@@ -2,20 +2,19 @@
 """
 Revalidate DOI metrics cache for previously successful requests.
 
-Run every 2 weeks via cron to refresh Altmetric scores and Google Scholar
+Run weekly via cron (every 7 days) to refresh Altmetric scores and Google Scholar
 citation counts. Only revalidates DOIs that previously returned success.
+Uses TOR_PROXY first (5 attempts), then SOCKS5_PROXIES (see .env.template).
 """
 
 import logging
-import os
 import sys
 
-# Ensure project root is on path
-_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, _root)
+from common import setup_script
 
-import src.cache_config  # noqa: E402, F401
-from src.scholar_citations import (  # noqa: E402
+setup_script()
+
+from src.scholar_citations import (
     fetch_altmetric_score,
     fetch_google_scholar_citations,
     list_cached_successful_dois,
