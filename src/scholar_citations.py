@@ -248,7 +248,7 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
             reason = "Crossref returned no metadata (API error or DOI not found)"
             logger.warning("Altmetric 401 for DOI %s: %s", doi, reason)
         else:
-            reason = "Author not in allowlist (Rummer, Bergseth, or Wu required)"
+            reason = "Author not in allowlist"
             logger.warning(
                 "Altmetric 401 for DOI %s: %s. Crossref authors: %s",
                 doi,
