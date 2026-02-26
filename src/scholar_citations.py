@@ -329,15 +329,18 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
         # 1. Search by DOI (try each proxy in turn if one is offline or blocked)
         result = _scholar_search_with_proxy_retries(doi, headers)
         if result is None:
-            if cached is not None:
+            # Scholar blocked on all proxies; Crossref already passed so found=True
+            if cached is not None and cached.get("found", True):
                 return ScholarCitationsResult(
                     doi=doi,
                     citations=cached.get("citations"),
-                    found=cached.get("found", True),
+                    found=True,
                     last_fetch=_last_fetch_from_cache(cached, path),
                 )
+            now_iso = datetime.now().isoformat()
+            _write_cache(path, {"found": True, "citations": None}, doi=doi)
             return ScholarCitationsResult(
-                doi=doi, citations=None, found=True, last_fetch=None
+                doi=doi, citations=None, found=True, last_fetch=now_iso
             )
 
         citations, no_results = result
