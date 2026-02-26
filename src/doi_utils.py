@@ -7,10 +7,9 @@ from urllib.parse import unquote
 
 def normalize_doi(doi: str | None) -> str:
     """
-    Return a canonical DOI string: fully unquoted and stripped.
-    Use before building URLs or storing in cache to avoid repeated encoding.
-    Repeatedly unquotes until stable so multi-encoded values (e.g. %252520...)
-    become a single clean DOI.
+    Return a canonical DOI string: fully unquoted, stripped, and lowercased.
+    DOIs are treated case-insensitively (e.g. 10.5268/IW-3.3.550 and 10.5268/iw-3.3.550
+    are the same). Use before building URLs or storing in cache.
     """
     if doi is None:
         return ""
@@ -20,4 +19,4 @@ def normalize_doi(doi: str | None) -> str:
         if t == s:
             break
         s = t
-    return s.strip()
+    return s.strip().lower()
