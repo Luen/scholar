@@ -2,7 +2,7 @@ import json
 import os
 import re
 
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 
 import src.cache_config  # noqa: F401 - configure HTTP cache before requests
 
@@ -97,11 +97,13 @@ def get_altmetric(doi: str):
     Fetch Altmetric data for a DOI. Cached for 2 weeks.
     Returns full Altmetric data (score, title, authors, counts, etc.).
     Returns 401 if Crossref does not list Rummer, Bergseth, or Wu.
+    Query param ?refresh=1 forces a fresh fetch (use if you get 401 due to stale cache).
     """
     doi = _normalize_doi_for_api(doi)
     if not doi or "/" not in doi:
         return jsonify({"error": "Invalid DOI"}), 400
-    result = fetch_altmetric_score(doi)
+    force_refresh = request.args.get("refresh") == "1"
+    result = fetch_altmetric_score(doi, force_refresh=force_refresh)
     if not result.found:
         return jsonify({"error": "Publication not found or author not in allowlist"}), 401
     data = result.details if result.details else {"doi": result.doi, "score": result.score}
@@ -114,11 +116,13 @@ def get_google_citations(doi: str):
     """
     Fetch Google Scholar citation count for a DOI. Cached for 2 weeks.
     Returns 401 if Crossref does not list Rummer, Bergseth, or Wu.
+    Query param ?refresh=1 forces a fresh fetch (use if you get 401 due to stale cache).
     """
     doi = _normalize_doi_for_api(doi)
     if not doi or "/" not in doi:
         return jsonify({"error": "Invalid DOI"}), 400
-    result = fetch_google_scholar_citations(doi)
+    force_refresh = request.args.get("refresh") == "1"
+    result = fetch_google_scholar_citations(doi, force_refresh=force_refresh)
     if not result.found:
         return jsonify({"error": "Publication not found or author not in allowlist"}), 401
     return jsonify({
