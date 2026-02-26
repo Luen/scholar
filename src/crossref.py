@@ -4,7 +4,7 @@ Crossref API client for fetching publication metadata and citation counts.
 Uses the Crossref REST API: https://api.crossref.org/documentation
 
 Crossref metadata (authors, title, journal) is immutable per DOI; only citation
-counts may change. Uses a permanent cache (never expire) for Crossref requests.
+counts may change. HTTP responses are cached for 1 month.
 """
 
 import hashlib
@@ -12,6 +12,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 from urllib.parse import quote
 
@@ -23,14 +24,14 @@ from .logger import print_warn
 
 logger = logging.getLogger(__name__)
 
-# Crossref metadata does not change; cache forever
+# Cache Crossref HTTP responses for 1 month
 _CACHE_DIR = os.environ.get("CACHE_DIR", "cache")
 _CROSSREF_CACHE_DB = os.path.join(_CACHE_DIR, "http_cache_crossref")
 os.makedirs(_CACHE_DIR, exist_ok=True)
 _crossref_session = requests_cache.CachedSession(
     _CROSSREF_CACHE_DB,
     backend="sqlite",
-    expire_after=None,  # Never expire
+    expire_after=timedelta(days=30),
     allowable_methods=("GET",),
     allowable_codes=(200, 203, 300, 301),
 )
@@ -106,7 +107,7 @@ def search_doi_by_title(pub_title: str, author_last_name: str) -> str | None:
     """
     Search Crossref by publication title and author; return the best-matching DOI.
 
-    Results are cached forever (DOIs do not change). Uses the Crossref REST API
+    HTTP requests are cached for 1 month. Uses the Crossref REST API
     /works endpoint with query.title and query.author.
     """
     if not pub_title or not pub_title.strip():
@@ -175,7 +176,8 @@ def search_doi_by_title(pub_title: str, author_last_name: str) -> str | None:
 def fetch_crossref_details(doi: str, force_refresh: bool = False) -> CrossrefResponse | None:
     """
     Fetch publication metadata and citation count from Crossref API.
-    When force_refresh=True, bypass the permanent cache (e.g. for ?refresh=1 on the API).
+    Responses are cached for 1 month. When force_refresh=True, bypass the cache
+    (e.g. for ?refresh=1 on the API).
     """
     doi = normalize_doi(doi)
     try:
