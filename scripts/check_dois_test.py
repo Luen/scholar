@@ -15,10 +15,10 @@ _script_dir = os.path.dirname(os.path.abspath(__file__))
 _project_root = os.path.dirname(_script_dir)
 sys.path.insert(0, _project_root)
 
-import src.cache_config  # noqa: F401
-from src.crossref import fetch_crossref_details
-from src.scholar_citations import ALLOWED_AUTHORS, _authors_contain_allowed
-from src.doi_utils import normalize_doi
+import src.cache_config  # noqa: E402, F401
+from src.crossref import fetch_crossref_details  # noqa: E402
+from src.doi_utils import normalize_doi  # noqa: E402
+from src.scholar_citations import ALLOWED_AUTHORS, _authors_contain_allowed  # noqa: E402
 
 DOIS = [
     "10.7717/peerj.20222",
