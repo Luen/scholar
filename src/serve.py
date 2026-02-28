@@ -89,9 +89,36 @@ def get_scholar(id):
         return jsonify({"error": "Invalid scholar data"}), 500
 
 
+# Basic DOI pattern: prefix 10. (registry) / suffix (no strict length)
+_DOI_PATTERN = re.compile(r"^10\.\d{4,9}/[-._;()/:a-zA-Z0-9]+$")
+
+
 def _normalize_doi_for_api(doi: str) -> str:
-    """Normalize DOI: unquote (handles URL-encoded DOIs) and strip."""
+    """Normalize DOI: unquote (handles single and multiple URL-encoding) and strip."""
     return normalize_doi(doi)
+
+
+def _validate_doi_for_api(doi: str) -> tuple[str | None, str | None]:
+    """
+    Normalize and validate DOI for API use.
+    Returns (normalized_doi, None) if valid, or (None, error_message) if invalid.
+    """
+    normalized = _normalize_doi_for_api(doi)
+    if not normalized:
+        return None, "Invalid DOI: empty"
+    if "/" not in normalized:
+        return None, "Invalid DOI: must contain a slash (e.g. 10.1234/example)"
+    if "%" in normalized:
+        return None, "Invalid DOI: malformed encoding (use 10.xxxx/suffix or single-encoded path)"
+    if not _DOI_PATTERN.match(normalized):
+        return None, "Invalid DOI: must match 10.xxxx/suffix format"
+    return normalized, None
+
+
+@app.route("/robots.txt", methods=["GET"])
+def robots_txt():
+    """Serve robots.txt to avoid 404s from crawlers and reduce noisy log traffic."""
+    return "User-agent: *\nDisallow: /\n", 200, {"Content-Type": "text/plain; charset=utf-8"}
 
 
 @app.route("/altmetric/<path:doi>", methods=["GET"])
@@ -102,9 +129,10 @@ def get_altmetric(doi: str):
     Returns 401 if Crossref does not list Rummer, Bergseth, or Wu.
     Query param ?refresh=1 (dev only) forces a fresh fetch.
     """
-    doi = _normalize_doi_for_api(doi)
-    if not doi or "/" not in doi:
-        return jsonify({"error": "Invalid DOI"}), 400
+    normalized_doi, err = _validate_doi_for_api(doi)
+    if err:
+        return jsonify({"error": err}), 400
+    doi = normalized_doi
     force_refresh = request.args.get("refresh") == "1"  # dev only
     result = fetch_altmetric_score(doi, force_refresh=force_refresh)
     if not result.found:
@@ -128,9 +156,10 @@ def get_google_citations(doi: str):
     Returns 401 if Crossref does not list Rummer, Bergseth, or Wu.
     Query param ?refresh=1 (dev only) forces a fresh fetch.
     """
-    doi = _normalize_doi_for_api(doi)
-    if not doi or "/" not in doi:
-        return jsonify({"error": "Invalid DOI"}), 400
+    normalized_doi, err = _validate_doi_for_api(doi)
+    if err:
+        return jsonify({"error": err}), 400
+    doi = normalized_doi
     force_refresh = request.args.get("refresh") == "1"  # dev only
     result = fetch_google_scholar_citations(doi, force_refresh=force_refresh)
     if not result.found:
