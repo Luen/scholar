@@ -1,9 +1,12 @@
+import hashlib
 import json
 import logging
 import os
 import re
+from datetime import datetime
+from email.utils import formatdate
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, make_response, jsonify, request, send_from_directory
 
 import src.cache_config  # noqa: F401 - configure HTTP cache before requests
 
@@ -20,6 +23,9 @@ app.config["JSON_SORT_KEYS"] = False  # Preserve key order: doi first, then cita
 
 SCHOLAR_DATA_DIR = os.environ.get("SCHOLAR_DATA_DIR", "scholar_data")
 SCHOLAR_DATA_DIR_ABS = os.path.abspath(SCHOLAR_DATA_DIR)
+
+# HTTP cache: clients revalidate after 1 day to pick up citation/score updates
+DOI_CACHE_MAX_AGE = 86400  # 1 day
 
 
 def _scholar_file_path(scholar_id: str) -> str | None:
@@ -98,6 +104,31 @@ def _normalize_doi_for_api(doi: str) -> str:
     return normalize_doi(doi)
 
 
+def _doi_cache_headers(last_fetch: str, doi: str) -> dict[str, str]:
+    """Return Cache-Control, Last-Modified, and ETag for DOI responses (1-day client cache)."""
+    try:
+        dt = datetime.fromisoformat(last_fetch.replace("Z", "+00:00"))
+        last_modified = formatdate(dt.timestamp(), usegmt=True)
+    except (ValueError, TypeError):
+        last_modified = formatdate(None, usegmt=True)
+    etag = hashlib.sha256(f"{doi}:{last_fetch}".encode()).hexdigest()
+    return {
+        "Cache-Control": f"public, max-age={DOI_CACHE_MAX_AGE}, must-revalidate",
+        "Last-Modified": last_modified,
+        "ETag": f'"{etag}"',
+    }
+
+
+def _etag_matches_request(etag: str, request_etag: str | None) -> bool:
+    """True if request's If-None-Match matches our ETag (allows 304)."""
+    if not request_etag:
+        return False
+    # If-None-Match can be "etag1", "etag1", "etag2" or *
+    if request_etag.strip() == "*":
+        return True
+    return etag.strip() in [e.strip().strip('"') for e in request_etag.split(",")]
+
+
 def _validate_doi_for_api(doi: str) -> tuple[str | None, str | None]:
     """
     Normalize and validate DOI for API use.
@@ -131,7 +162,9 @@ def get_altmetric(doi: str):
     """
     normalized_doi, err = _validate_doi_for_api(doi)
     if err:
-        return jsonify({"error": err}), 400
+        resp = jsonify({"error": err})
+        resp.headers["Cache-Control"] = "no-store"
+        return resp, 400
     doi = normalized_doi
     force_refresh = request.args.get("refresh") == "1"  # dev only
     result = fetch_altmetric_score(doi, force_refresh=force_refresh)
@@ -143,10 +176,20 @@ def get_altmetric(doi: str):
         body = {"error": "Publication not found or author not in allowlist"}
         if result.error_reason:
             body["reason"] = result.error_reason
-        return jsonify(body), 401
+        resp = jsonify(body)
+        resp.headers["Cache-Control"] = "no-store"
+        return resp, 401
+    headers = _doi_cache_headers(result.last_fetch, result.doi)
+    etag = hashlib.sha256(f"{result.doi}:{result.last_fetch}".encode()).hexdigest()
+    if _etag_matches_request(etag, request.headers.get("If-None-Match")):
+        resp = make_response("", 304)
+        resp.headers.update(headers)
+        return resp
     data = result.details if result.details else {"doi": result.doi, "score": result.score}
     data = {**data, "last_fetch": result.last_fetch}
-    return jsonify(data)
+    resp = jsonify(data)
+    resp.headers.update(headers)
+    return resp
 
 
 @app.route("/google-citations/<path:doi>", methods=["GET"])
@@ -158,7 +201,9 @@ def get_google_citations(doi: str):
     """
     normalized_doi, err = _validate_doi_for_api(doi)
     if err:
-        return jsonify({"error": err}), 400
+        resp = jsonify({"error": err})
+        resp.headers["Cache-Control"] = "no-store"
+        return resp, 400
     doi = normalized_doi
     force_refresh = request.args.get("refresh") == "1"  # dev only
     result = fetch_google_scholar_citations(doi, force_refresh=force_refresh)
@@ -170,7 +215,15 @@ def get_google_citations(doi: str):
         body = {"error": "Publication not found or author not in allowlist"}
         if result.error_reason:
             body["reason"] = result.error_reason
-        return jsonify(body), 401
+        resp = jsonify(body)
+        resp.headers["Cache-Control"] = "no-store"
+        return resp, 401
+    headers = _doi_cache_headers(result.last_fetch, result.doi)
+    etag = hashlib.sha256(f"{result.doi}:{result.last_fetch}".encode()).hexdigest()
+    if _etag_matches_request(etag, request.headers.get("If-None-Match")):
+        resp = make_response("", 304)
+        resp.headers.update(headers)
+        return resp
     data = {
         "doi": result.doi,
         "citations": result.citations,
@@ -178,7 +231,9 @@ def get_google_citations(doi: str):
     }
     if result.warning:
         data["warning"] = result.warning
-    return jsonify(data)
+    resp = jsonify(data)
+    resp.headers.update(headers)
+    return resp
 
 
 if __name__ == "__main__":

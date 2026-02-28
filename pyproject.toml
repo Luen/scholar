@@ -9,6 +9,9 @@ pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
 filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning"]
+markers = [
+    "integration: tests that need network, browser, or external services (excluded in CI)",
+]
 
 [tool.ruff]
 target-version = "py39"
