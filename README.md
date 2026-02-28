@@ -173,7 +173,7 @@ The app **does** switch to the next proxy when one fails (timeout or block). It 
 Refreshes Altmetric and Google Scholar data. Runs daily at 02:00 in the cron container. DOIs are read from `scholar_data` (all publications with a DOI):
 
 ```bash
-docker exec scholar_web python scripts/revalidate_scholar_citations.py
+docker exec scholar_web python -u scripts/revalidate_scholar_citations.py
 ```
 
 - **Phase 1 (every run):** Refetches DOIs with no cache or with a blocked/warning cache (missing or previously failed), so they are retried on each daily run.

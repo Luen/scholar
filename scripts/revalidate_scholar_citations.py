@@ -14,6 +14,9 @@ import logging
 import os
 import sys
 
+# Show progress immediately when run via docker exec (no TTY) or cron
+print("Loading revalidation script...", file=sys.stderr, flush=True)
+
 from common import PROJECT_ROOT, setup_script
 
 setup_script()
@@ -29,10 +32,18 @@ from src.scholar_citations import (  # noqa: E402
     list_cached_successful_dois_older_than,
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
+# Unbuffered logging so output appears immediately when run via docker exec / cron
+class _FlushingHandler(logging.StreamHandler):
+    def emit(self, record):
+        super().emit(record)
+        self.flush()
+
+
+logging.root.setLevel(logging.INFO)
+logging.root.handlers.clear()
+_h = _FlushingHandler(sys.stderr)
+_h.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+logging.root.addHandler(_h)
 log = logging.getLogger(__name__)
 
 
