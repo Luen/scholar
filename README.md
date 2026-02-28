@@ -7,8 +7,6 @@ The JSON can then be used, for example, by uploading the data to a publicly acce
 [Meltwater](https://www.meltwater.com/) is the news gathering tool used by some universities. See also Isentia Medaiportal.
 See also [Zotera](https://www.zotero.org/), an [open source citation manager](https://github.com/zotero/zotero).
 
-altmetrics
-
 `python -m venv scholar && source scholar/bin/activate`
 
 ## Installation
@@ -44,7 +42,9 @@ altmetrics
 The stack includes:
 
 - **web** – Flask API serving scholar data
-- **cron** – Runs the main scraper on a schedule
+- **cron** – Runs the main scraper and DOI metrics revalidation on a schedule
+
+**Cron schedule** (in `cron/Dockerfile`): main scholar pipeline at 00:00 every 14 days; DOI metrics revalidation (Altmetric / Google Scholar cache) at **02:00 daily**.
 
 Build the base image (required once; no container is created):
 
@@ -129,6 +129,57 @@ for i, entry in enumerate([p.strip() for p in raw.replace(';', chr(10)).splitlin
         print(f'Proxy {i+1} ({host_port}): FAIL - {e}')
 "
 ```
+
+Test whether each proxy is blocked by Google Scholar (CAPTCHA / "unusual traffic"). Uses the same block detection as the app:
+
+```bash
+docker exec scholar_web python -c "
+import os, requests
+from urllib.parse import quote
+raw = os.environ.get('SOCKS5_PROXIES', '').strip()
+if not raw:
+    print('No SOCKS5_PROXIES set'); exit(0)
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': 'https://scholar.google.com/',
+}
+block_signals = ('captcha', 'recaptcha', 'unusual traffic', 'automated queries', 'our systems have detected', 'sorry, we have detected')
+scholar_url = 'https://scholar.google.com/scholar?hl=en&as_sdt=0%2C5&q=' + quote('10.1111/1365-2435.70147') + '&btnG='
+for i, entry in enumerate([p.strip() for p in raw.replace(';', chr(10)).splitlines() if p.strip()]):
+    parts = entry.split('|', 2)
+    if len(parts) < 3:
+        print(f'Proxy {i+1}: invalid format'); continue
+    host_port, user, passw = parts[0].strip(), parts[1].strip(), parts[2].strip()
+    url = 'socks5://' + quote(user, safe='') + ':' + quote(passw, safe='') + '@' + host_port
+    try:
+        r = requests.get(scholar_url, headers=headers, proxies={'http': url, 'https': url}, timeout=30)
+        lower = r.text.lower()
+        blocked = any(s in lower for s in block_signals) or 'scholar.google.com' not in (r.url or '')
+        if blocked:
+            print(f'Proxy {i+1} ({host_port}): BLOCKED (CAPTCHA or rate limit)')
+        else:
+            print(f'Proxy {i+1} ({host_port}): OK (not blocked) status={r.status_code}')
+    except Exception as e:
+        print(f'Proxy {i+1} ({host_port}): FAIL - {e}')
+"
+```
+
+The app **does** switch to the next proxy when one fails (timeout or block). It tries **TOR_PROXY first** (up to 5 attempts), then **each SOCKS5 proxy** in order. If `TOR_PROXY` is set and Tor is slow or unreachable, each DOI request can wait up to ~2.5 minutes on Tor before SOCKS5 is tried. To use SOCKS5 only, unset `TOR_PROXY` in `.env`; or ensure Tor is responsive so the chain moves on quickly.
+
+### Revalidating DOI metrics cache
+
+Refreshes Altmetric and Google Scholar data. Runs daily at 02:00 in the cron container. DOIs are read from `scholar_data` (all publications with a DOI):
+
+```bash
+docker exec scholar_web python scripts/revalidate_scholar_citations.py
+```
+
+- **Phase 1 (every run):** Refetches DOIs with no cache or with a blocked/warning cache (missing or previously failed), so they are retried on each daily run.
+- **Phase 2 (only after 7 days):** Revalidates DOIs that have successful cache older than a week.
+
+Neither phase uses `force_refresh`, so if a request is blocked you keep existing cache. Run manually after fixing proxies to fill in missing DOIs.
 
 ## Project structure
 

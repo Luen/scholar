@@ -95,6 +95,52 @@ def list_cached_successful_dois() -> set[str]:
     return dois
 
 
+def list_cached_dois_with_warning() -> set[str]:
+    """Return DOIs that have a cache entry with a warning (blocked/failed); retry these each run."""
+    dois: set[str] = set()
+    if not os.path.isdir(CACHE_DIR):
+        return dois
+    for name in os.listdir(CACHE_DIR):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(CACHE_DIR, name)
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("warning") and data.get("doi"):
+                dois.add(normalize_doi(data["doi"]))
+        except (json.JSONDecodeError, OSError, KeyError):
+            continue
+    return dois
+
+
+def list_cached_successful_dois_older_than(seconds: int) -> set[str]:
+    """Return DOIs that have successful cache (found=True, no warning) older than given seconds."""
+    dois: set[str] = set()
+    if not os.path.isdir(CACHE_DIR):
+        return dois
+    now = datetime.now()
+    for name in os.listdir(CACHE_DIR):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(CACHE_DIR, name)
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            if not data.get("found") or not data.get("doi") or data.get("warning"):
+                continue
+            fetched_at = data.get("fetched_at")
+            if not fetched_at:
+                continue
+            fetched_dt = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
+            age_seconds = now.timestamp() - fetched_dt.timestamp()
+            if age_seconds >= seconds:
+                dois.add(normalize_doi(data["doi"]))
+        except (json.JSONDecodeError, OSError, KeyError, ValueError):
+            continue
+    return dois
+
+
 def _write_cache(path: str, value: dict, doi: str = "", cache_seconds: int | None = None) -> None:
     now = datetime.now()
     ttl = cache_seconds if cache_seconds is not None else CACHE_SECONDS
