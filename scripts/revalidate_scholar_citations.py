@@ -61,6 +61,7 @@ def _all_dois_from_scholar_data() -> set[str]:
 
 
 def main() -> int:
+    log.info("Starting revalidation: loading DOIs from scholar_data and cache state")
     all_dois = _all_dois_from_scholar_data()
     successful = list_cached_successful_dois()
     with_warning = list_cached_dois_with_warning()
@@ -70,53 +71,79 @@ def main() -> int:
     missing = all_dois - successful
     refetch = missing | with_warning
 
-    # Phase 2 (only after a week): successful cache older than 7 days
     if not all_dois:
         log.info("No DOIs found in scholar_data (empty or missing directory)")
         return 0
 
+    log.info(
+        "DOI counts: %d total in scholar_data, %d missing cache, %d with warning/blocked, %d stale (>7d)",
+        len(all_dois),
+        len(missing),
+        len(with_warning & successful),
+        len(stale),
+    )
+
     total_ok = 0
     total_fail = 0
+    refetch_list = sorted(refetch)
+    stale_list = sorted(stale)
 
-    if refetch:
+    if refetch_list:
         log.info(
             "Phase 1: refetching %d DOIs (missing: %d, blocked/warning: %d)",
-            len(refetch),
+            len(refetch_list),
             len(missing),
             len(with_warning & successful),
         )
-        for doi in sorted(refetch):
+        for i, doi in enumerate(refetch_list, 1):
             try:
                 a = fetch_altmetric_score(doi, force_refresh=False)
                 s = fetch_google_scholar_citations(doi, force_refresh=False)
                 if a.found or s.found:
                     total_ok += 1
+                    status = "ok"
+                    if getattr(s, "warning", None):
+                        status = "ok (citations: %s)" % (s.warning or "blocked")
+                    log.info("Phase 1 [%d/%d] %s - %s", i, len(refetch_list), doi, status)
                 else:
                     total_fail += 1
+                    log.info("Phase 1 [%d/%d] %s - fail (no data)", i, len(refetch_list), doi)
             except Exception as e:
-                log.warning("Fetch failed for DOI %s: %s", doi, e)
                 total_fail += 1
+                log.warning("Phase 1 [%d/%d] %s - error: %s", i, len(refetch_list), doi, e)
+        log.info("Phase 1 done: %d ok, %d failed", total_ok, total_fail)
 
-    if stale:
-        log.info("Phase 2: revalidating %d DOIs with cache older than 7 days", len(stale))
-        for doi in sorted(stale):
+    phase2_ok = 0
+    phase2_fail = 0
+    if stale_list:
+        log.info("Phase 2: revalidating %d DOIs with cache older than 7 days", len(stale_list))
+        for i, doi in enumerate(stale_list, 1):
             try:
                 a = fetch_altmetric_score(doi, force_refresh=False)
                 s = fetch_google_scholar_citations(doi, force_refresh=False)
                 if a.found or s.found:
+                    phase2_ok += 1
                     total_ok += 1
+                    status = "ok"
+                    if getattr(s, "warning", None):
+                        status = "ok (citations: %s)" % (s.warning or "blocked")
+                    log.info("Phase 2 [%d/%d] %s - %s", i, len(stale_list), doi, status)
                 else:
+                    phase2_fail += 1
                     total_fail += 1
+                    log.info("Phase 2 [%d/%d] %s - fail (no data)", i, len(stale_list), doi)
             except Exception as e:
-                log.warning("Revalidation failed for DOI %s: %s", doi, e)
+                phase2_fail += 1
                 total_fail += 1
+                log.warning("Phase 2 [%d/%d] %s - error: %s", i, len(stale_list), doi, e)
+        log.info("Phase 2 done: %d ok, %d failed", phase2_ok, phase2_fail)
 
     log.info(
         "Revalidation complete: %d ok, %d failed (refetch: %d, stale: %d)",
         total_ok,
         total_fail,
-        len(refetch),
-        len(stale),
+        len(refetch_list),
+        len(stale_list),
     )
     return 0
 
