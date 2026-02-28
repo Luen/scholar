@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from email.utils import formatdate
 
-from flask import Flask, make_response, jsonify, request, send_from_directory
+from flask import Flask, jsonify, make_response, request, send_from_directory
 
 import src.cache_config  # noqa: F401 - configure HTTP cache before requests
 

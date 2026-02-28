@@ -17,11 +17,13 @@ import sys
 # Show progress immediately when run via docker exec (no TTY) or cron
 print("Loading revalidation script...", file=sys.stderr, flush=True)
 
-from common import PROJECT_ROOT, setup_script
+from common import PROJECT_ROOT, setup_script  # noqa: E402
 
 setup_script()
 
 STALE_SECONDS = 7 * 24 * 60 * 60  # 7 days
+# When Scholar returns this warning, skip Scholar for the rest of the run (still do Altmetric)
+SCHOLAR_BLOCKED_ALL_PROXIES = "blocked requests on all proxies"
 
 from src.doi_utils import normalize_doi  # noqa: E402
 from src.scholar_citations import (  # noqa: E402
@@ -31,6 +33,7 @@ from src.scholar_citations import (  # noqa: E402
     list_cached_successful_dois,
     list_cached_successful_dois_older_than,
 )
+
 
 # Unbuffered logging so output appears immediately when run via docker exec / cron
 class _FlushingHandler(logging.StreamHandler):
@@ -98,6 +101,7 @@ def main() -> int:
     total_fail = 0
     refetch_list = sorted(refetch)
     stale_list = sorted(stale)
+    skip_scholar = False  # set when Scholar is blocked on all proxies; skip Scholar for rest of run
 
     if refetch_list:
         log.info(
@@ -109,12 +113,26 @@ def main() -> int:
         for i, doi in enumerate(refetch_list, 1):
             try:
                 a = fetch_altmetric_score(doi, force_refresh=False)
-                s = fetch_google_scholar_citations(doi, force_refresh=False)
-                if a.found or s.found:
+                if skip_scholar:
+                    s_found = False
+                    s_warning = None
+                else:
+                    s = fetch_google_scholar_citations(doi, force_refresh=False)
+                    s_found = s.found
+                    s_warning = getattr(s, "warning", None)
+                    if s_warning and SCHOLAR_BLOCKED_ALL_PROXIES in s_warning:
+                        skip_scholar = True
+                        log.info(
+                            "Google Scholar blocked on all proxies; skipping Scholar for remaining %d DOIs",
+                            len(refetch_list) - i,
+                        )
+                if a.found or s_found:
                     total_ok += 1
                     status = "ok"
-                    if getattr(s, "warning", None):
-                        status = "ok (citations: %s)" % (s.warning or "blocked")
+                    if skip_scholar and not s_found:
+                        status = "ok (Scholar skipped - blocked)"
+                    elif s_warning:
+                        status = "ok (citations: %s)" % (s_warning or "blocked")
                     log.info("Phase 1 [%d/%d] %s - %s", i, len(refetch_list), doi, status)
                 else:
                     total_fail += 1
@@ -131,13 +149,27 @@ def main() -> int:
         for i, doi in enumerate(stale_list, 1):
             try:
                 a = fetch_altmetric_score(doi, force_refresh=False)
-                s = fetch_google_scholar_citations(doi, force_refresh=False)
-                if a.found or s.found:
+                if skip_scholar:
+                    s_found = False
+                    s_warning = None
+                else:
+                    s = fetch_google_scholar_citations(doi, force_refresh=False)
+                    s_found = s.found
+                    s_warning = getattr(s, "warning", None)
+                    if s_warning and SCHOLAR_BLOCKED_ALL_PROXIES in s_warning:
+                        skip_scholar = True
+                        log.info(
+                            "Google Scholar blocked on all proxies; skipping Scholar for remaining %d DOIs",
+                            len(stale_list) - i,
+                        )
+                if a.found or s_found:
                     phase2_ok += 1
                     total_ok += 1
                     status = "ok"
-                    if getattr(s, "warning", None):
-                        status = "ok (citations: %s)" % (s.warning or "blocked")
+                    if skip_scholar and not s_found:
+                        status = "ok (Scholar skipped - blocked)"
+                    elif s_warning:
+                        status = "ok (citations: %s)" % (s_warning or "blocked")
                     log.info("Phase 2 [%d/%d] %s - %s", i, len(stale_list), doi, status)
                 else:
                     phase2_fail += 1
