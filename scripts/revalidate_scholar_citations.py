@@ -50,8 +50,12 @@ logging.root.addHandler(_h)
 log = logging.getLogger(__name__)
 
 
+# Only revalidate DOIs from these authors (matches Crossref allowlist; others get 401)
+REVALIDATION_AUTHOR_NAMES = ("Rummer", "Bergseth", "Wu")
+
+
 def _all_dois_from_scholar_data() -> set[str]:
-    """Collect all DOIs from scholar_data JSON files (publications with doi)."""
+    """Collect DOIs from scholar_data JSON files for Rummer, Bergseth, Wu only (others 401)."""
     data_dir = os.environ.get("SCHOLAR_DATA_DIR", "scholar_data")
     if not os.path.isabs(data_dir):
         data_dir = os.path.join(PROJECT_ROOT, data_dir)
@@ -66,6 +70,9 @@ def _all_dois_from_scholar_data() -> set[str]:
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
         except (json.JSONDecodeError, OSError):
+            continue
+        author_name = (data.get("name") or "").strip()
+        if not any(allowed.lower() in author_name.lower() for allowed in REVALIDATION_AUTHOR_NAMES):
             continue
         for pub in data.get("publications") or []:
             doi = (pub.get("doi") or "").strip()
