@@ -32,6 +32,7 @@ from src.scholar_citations import (  # noqa: E402
     list_cached_dois_with_warning,
     list_cached_successful_dois,
     list_cached_successful_dois_older_than,
+    touch_scholar_cache,
 )
 
 
@@ -123,6 +124,7 @@ def main() -> int:
                 if skip_scholar:
                     s_found = False
                     s_warning = None
+                    touch_scholar_cache(doi)
                 else:
                     s = fetch_google_scholar_citations(doi, force_refresh=False)
                     s_found = s.found
@@ -159,6 +161,7 @@ def main() -> int:
                 if skip_scholar:
                     s_found = False
                     s_warning = None
+                    touch_scholar_cache(doi)
                 else:
                     s = fetch_google_scholar_citations(doi, force_refresh=False)
                     s_found = s.found

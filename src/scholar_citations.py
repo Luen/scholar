@@ -114,6 +114,38 @@ def list_cached_dois_with_warning() -> set[str]:
     return dois
 
 
+def touch_scholar_cache(doi: str) -> bool:
+    """
+    Update fetched_at (and expires_at) in the scholar cache file to now.
+    Used when revalidation runs but Scholar is skipped (blocked) so that
+    last_fetch reflects "last run" rather than the previous fetch date.
+    Returns True if the cache file was updated, False if no file exists.
+    """
+    doi = normalize_doi(doi)
+    path = _cache_path(doi, "scholar")
+    if not os.path.isfile(path):
+        return False
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return False
+    now = datetime.now()
+    ttl = (
+        CACHE_SECONDS_BLOCKED_OR_WARNING
+        if data.get("warning")
+        else CACHE_SECONDS
+    )
+    data["fetched_at"] = now.isoformat()
+    data["expires_at"] = (now + timedelta(seconds=ttl)).isoformat()
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    except OSError:
+        return False
+    return True
+
+
 def list_cached_successful_dois_older_than(seconds: int) -> set[str]:
     """Return DOIs that have successful cache (found=True, no warning) older than given seconds."""
     dois: set[str] = set()
@@ -393,15 +425,26 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
         if result is None:
             # Scholar blocked on all proxies; Crossref already passed so found=True
             warning = "Google Scholar blocked requests on all proxies (CAPTCHA/IP block)"
+            now_iso = datetime.now().isoformat()
             if cached is not None and cached.get("found", True):
+                # Keep existing data but update fetched_at so last_fetch reflects this run
+                _write_cache(
+                    path,
+                    {
+                        "found": True,
+                        "citations": cached.get("citations"),
+                        "warning": cached.get("warning") or warning,
+                    },
+                    doi=doi,
+                    cache_seconds=CACHE_SECONDS_BLOCKED_OR_WARNING,
+                )
                 return ScholarCitationsResult(
                     doi=doi,
                     citations=cached.get("citations"),
                     found=True,
-                    last_fetch=_last_fetch_from_cache(cached, path),
+                    last_fetch=now_iso,
                     warning=cached.get("warning") or warning,
                 )
-            now_iso = datetime.now().isoformat()
             _write_cache(
                 path,
                 {"found": True, "citations": None, "warning": warning},
