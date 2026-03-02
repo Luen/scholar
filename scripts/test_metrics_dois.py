@@ -4,7 +4,7 @@ Test Google Scholar citations and Altmetric scores for the DOIs in common.DOIS.
 
 Reports which DOIs fail to get Altmetric data and which fail to get Google Scholar
 citations (e.g. 401 author allowlist, no data, or request/parse failure).
-Uses TOR_PROXY first (5 attempts), then SOCKS5_PROXIES (see .env.template).
+Uses TOR_PROXY first (3 attempts), then SOCKS5_PROXIES (see .env.template).
 """
 
 from common import DOIS, setup_script

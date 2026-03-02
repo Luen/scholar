@@ -241,7 +241,7 @@ def _scholar_search(
 
 def _scholar_search_with_proxy_retries(query: str, headers: dict) -> tuple[int | None, bool] | None:
     """
-    Try Google Scholar search: Tor proxy first (up to 5 attempts, same proxy),
+    Try Google Scholar search: Tor proxy first (up to 3 attempts, same proxy),
     then each SOCKS5 proxy in turn. Returns first successful result or None.
     """
     proxies_list = get_request_proxy_chain()

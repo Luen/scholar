@@ -66,7 +66,7 @@ def _get_with_proxy_retries(
     allow_redirects: bool = True,
 ) -> requests.Response:
     """
-    Try session.get(url, ...) with Tor proxy first (up to 5 attempts), then
+    Try session.get(url, ...) with Tor proxy first (up to 3 attempts), then
     each SOCKS5 proxy in turn; return first successful response. Raises the
     last RequestException if all attempts fail.
     """

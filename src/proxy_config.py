@@ -2,7 +2,7 @@
 Proxy configuration for outgoing requests (Altmetric, Google Scholar).
 
 - TOR_PROXY: HTTP proxy URL (e.g. http://localhost:3128). Used first; on block
-  we retry with the same Tor proxy up to 5 times (Tor handles IP rotation), then
+  we retry with the same Tor proxy up to 3 times (Tor handles IP rotation), then
   fall back to SOCKS5_PROXIES.
 - SOCKS5_PROXIES: Format: one proxy per line (or semicolon-separated). Each
   entry: host:port|username|password (password may contain |).
@@ -97,9 +97,12 @@ def get_tor_proxy() -> dict[str, str] | None:
     return {"http": url, "https": url}
 
 
+TOR_ATTEMPTS = 3
+
+
 def get_request_proxy_chain() -> list[dict[str, str] | None]:
     """
-    Proxy chain for retries: try Tor first (same proxy up to 5 times, as the
+    Proxy chain for retries: try Tor first (same proxy up to 3 times, as the
     Tor proxy handles IP rotation), then each SOCKS5 proxy in turn.
     Returns a list of proxy dicts (or None for no proxy). Callers should try
     each entry in order; on block/failure try the next.
@@ -107,7 +110,7 @@ def get_request_proxy_chain() -> list[dict[str, str] | None]:
     chain: list[dict[str, str] | None] = []
     tor = get_tor_proxy()
     if tor:
-        chain.extend([tor] * 5)
+        chain.extend([tor] * TOR_ATTEMPTS)
     socks5 = get_all_socks5_proxies()
     chain.extend(socks5)
     if not chain:
@@ -118,7 +121,7 @@ def get_request_proxy_chain() -> list[dict[str, str] | None]:
 def get_request_proxy_chain_summary() -> str:
     """
     Human-readable summary of the proxy chain for logging.
-    e.g. "5 Tor + 4 SOCKS5", "4 SOCKS5", "5 Tor only", "1 (direct)".
+    e.g. "3 Tor + 4 SOCKS5", "4 SOCKS5", "3 Tor only", "1 (direct)".
     """
     tor = get_tor_proxy()
     socks5 = get_all_socks5_proxies()
@@ -126,7 +129,7 @@ def get_request_proxy_chain_summary() -> str:
         return "1 (direct)"
     parts = []
     if tor:
-        parts.append("5 Tor")
+        parts.append(f"{TOR_ATTEMPTS} Tor")
     if socks5:
         parts.append(f"{len(socks5)} SOCKS5")
     return " + ".join(parts)

@@ -166,7 +166,7 @@ for i, entry in enumerate([p.strip() for p in raw.replace(';', chr(10)).splitlin
 "
 ```
 
-The app **does** switch to the next proxy when one fails (timeout or block). It tries **TOR_PROXY first** (up to 5 attempts), then **each SOCKS5 proxy** in order. If `TOR_PROXY` is set and Tor is slow or unreachable, each DOI request can wait up to ~2.5 minutes on Tor before SOCKS5 is tried. To use SOCKS5 only, unset `TOR_PROXY` in `.env`; or ensure Tor is responsive so the chain moves on quickly.
+The app **does** switch to the next proxy when one fails (timeout or block). It tries **TOR_PROXY first** (up to 3 attempts), then **each SOCKS5 proxy** in order. If `TOR_PROXY` is set and Tor is slow or unreachable, each DOI request can wait up to ~1.5 minutes on Tor before SOCKS5 is tried. To use SOCKS5 only, unset `TOR_PROXY` in `.env`; or ensure Tor is responsive so the chain moves on quickly.
 
 ### Revalidating DOI metrics cache
 

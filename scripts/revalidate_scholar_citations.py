@@ -6,7 +6,7 @@ Run daily via cron. Phase 1 (every run): fetch DOIs with no cache or with a
 warning/blocked cache. Phase 2 (only when cache is older than 7 days): revalidate
 DOIs that have successful cache older than a week. Does not use force_refresh so
 that if we get CAPTCHA/blocked we keep existing cache. Uses TOR_PROXY first
-(5 attempts), then SOCKS5_PROXIES (see .env.template).
+(3 attempts), then SOCKS5_PROXIES (see .env.template).
 """
 
 import json
