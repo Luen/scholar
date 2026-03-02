@@ -44,7 +44,8 @@ class _FlushingHandler(logging.StreamHandler):
         self.flush()
 
 
-logging.root.setLevel(logging.INFO)
+_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+logging.root.setLevel(getattr(logging, _level, logging.INFO))
 logging.root.handlers.clear()
 _h = _FlushingHandler(sys.stderr)
 _h.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
