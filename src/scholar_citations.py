@@ -131,11 +131,7 @@ def touch_scholar_cache(doi: str) -> bool:
     except (json.JSONDecodeError, OSError):
         return False
     now = datetime.now()
-    ttl = (
-        CACHE_SECONDS_BLOCKED_OR_WARNING
-        if data.get("warning")
-        else CACHE_SECONDS
-    )
+    ttl = CACHE_SECONDS_BLOCKED_OR_WARNING if data.get("warning") else CACHE_SECONDS
     data["fetched_at"] = now.isoformat()
     data["expires_at"] = (now + timedelta(seconds=ttl)).isoformat()
     try:

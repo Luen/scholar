@@ -4,9 +4,10 @@ Revalidate DOI metrics cache: refetch missing/blocked every run; revalidate stal
 
 Run daily via cron. Phase 1 (every run): fetch DOIs with no cache or with a
 warning/blocked cache. Phase 2 (only when cache is older than 7 days): revalidate
-DOIs that have successful cache older than a week. Does not use force_refresh so
-that if we get CAPTCHA/blocked we keep existing cache. Uses TOR_PROXY first
-(3 attempts), then SOCKS5_PROXIES (see .env.template).
+DOIs that have successful cache older than a week. Uses force_refresh for
+Scholar so we actually try the proxy chain each run (otherwise cached warning
+returns immediately and SOCKS5 is never tried). Uses TOR_PROXY first (3 attempts),
+then SOCKS5_PROXIES (see .env.template).
 """
 
 import json
@@ -126,7 +127,8 @@ def main() -> int:
                     s_warning = None
                     touch_scholar_cache(doi)
                 else:
-                    s = fetch_google_scholar_citations(doi, force_refresh=False)
+                    # Force refresh so we actually try proxies (otherwise cached warning returns immediately)
+                    s = fetch_google_scholar_citations(doi, force_refresh=True)
                     s_found = s.found
                     s_warning = getattr(s, "warning", None)
                     if s_warning and SCHOLAR_BLOCKED_ALL_PROXIES in s_warning:
@@ -163,7 +165,7 @@ def main() -> int:
                     s_warning = None
                     touch_scholar_cache(doi)
                 else:
-                    s = fetch_google_scholar_citations(doi, force_refresh=False)
+                    s = fetch_google_scholar_citations(doi, force_refresh=True)
                     s_found = s.found
                     s_warning = getattr(s, "warning", None)
                     if s_warning and SCHOLAR_BLOCKED_ALL_PROXIES in s_warning:
