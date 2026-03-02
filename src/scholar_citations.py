@@ -230,6 +230,12 @@ def _scholar_search(
         return None
     if _is_blocked_response(resp.text, resp.url or url):
         logger.warning("Google Scholar appears to be blocking requests (CAPTCHA/IP block)")
+        logger.debug(
+            "Blocked response: url=%s status=%s body_snippet=%.80s",
+            resp.url,
+            resp.status_code,
+            (resp.text or "").strip()[:200],
+        )
         return None
     soup = BeautifulSoup(resp.text, "html.parser")
     return _parse_scholar_citations(soup)

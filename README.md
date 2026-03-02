@@ -130,7 +130,7 @@ for i, entry in enumerate([p.strip() for p in raw.replace(';', chr(10)).splitlin
 "
 ```
 
-Test whether each proxy is blocked by Google Scholar (CAPTCHA / "unusual traffic"). Uses the same block detection as the app:
+Test whether each proxy is blocked by Google Scholar (CAPTCHA / "unusual traffic"). This script **only uses SOCKS5_PROXIES** (it does not use Tor). The revalidation app tries **Tor first**, then SOCKS5, so if Tor is blocked you will see "blocked on all proxies" even when SOCKS5 work in this test. To use SOCKS5 only in the app, unset `TOR_PROXY` in `.env`.
 
 ```bash
 docker exec scholar_web python -c "
@@ -166,7 +166,7 @@ for i, entry in enumerate([p.strip() for p in raw.replace(';', chr(10)).splitlin
 "
 ```
 
-The app **does** switch to the next proxy when one fails (timeout or block). It tries **TOR_PROXY first** (up to 3 attempts), then **each SOCKS5 proxy** in order. If `TOR_PROXY` is set and Tor is slow or unreachable, each DOI request can wait up to ~1.5 minutes on Tor before SOCKS5 is tried. To use SOCKS5 only, unset `TOR_PROXY` in `.env`; or ensure Tor is responsive so the chain moves on quickly.
+The app tries **TOR_PROXY first** (up to 3 attempts), then **each SOCKS5 proxy** in order. If Tor is blocked (common), you see 3 blocked warnings then 4 more for SOCKS5; if SOCKS5 also return blocked (e.g. different query or rate limit), you see "blocked on all 7". To try SOCKS5 only: unset `TOR_PROXY` in `.env` and re-run revalidation. To see why a response was treated as blocked, run with `LOG_LEVEL=DEBUG` and check logs for "Blocked response: url=...".
 
 ### Revalidating DOI metrics cache
 
