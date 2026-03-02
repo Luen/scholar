@@ -20,7 +20,7 @@ from bs4 import BeautifulSoup
 from .altmetric import fetch_altmetric_details
 from .crossref import fetch_crossref_details
 from .doi_utils import normalize_doi
-from .proxy_config import get_request_proxy_chain
+from .proxy_config import get_request_proxy_chain, get_request_proxy_chain_summary
 
 logger = logging.getLogger(__name__)
 
@@ -245,18 +245,34 @@ def _scholar_search_with_proxy_retries(query: str, headers: dict) -> tuple[int |
     then each SOCKS5 proxy in turn. Returns first successful result or None.
     """
     proxies_list = get_request_proxy_chain()
+    chain_summary = get_request_proxy_chain_summary()
+    logger.info("Scholar proxy chain: %s (%d attempts)", chain_summary, len(proxies_list))
+
     last_e: requests.RequestException | None = None
+    got_http_response = False  # True if any attempt got HTTP (even blocked/non-200)
     for proxies in proxies_list:
         try:
             result = _scholar_search(query, headers, proxies)
+            got_http_response = True
             if result is not None:
                 return result
         except requests.RequestException as e:
             last_e = e
             logger.debug("Scholar search failed with proxy: %s", e)
             continue
-    if last_e is not None:
-        logger.warning("Scholar search failed for all proxies for query %.60s: %s", query, last_e)
+    if last_e is not None and not got_http_response:
+        logger.warning(
+            "Scholar unreachable for query %.60s: all %d attempts failed with connection error (e.g. %s). Check TOR_PROXY reachability and SOCKS5_PROXIES.",
+            query,
+            len(proxies_list),
+            last_e,
+        )
+    elif got_http_response:
+        logger.warning(
+            "Scholar returned blocked/CAPTCHA or non-200 for all %d proxies for query %.60s",
+            len(proxies_list),
+            query,
+        )
     return None
 
 

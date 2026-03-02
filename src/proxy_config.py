@@ -113,3 +113,20 @@ def get_request_proxy_chain() -> list[dict[str, str] | None]:
     if not chain:
         return [None]
     return chain
+
+
+def get_request_proxy_chain_summary() -> str:
+    """
+    Human-readable summary of the proxy chain for logging.
+    e.g. "5 Tor + 4 SOCKS5", "4 SOCKS5", "5 Tor only", "1 (direct)".
+    """
+    tor = get_tor_proxy()
+    socks5 = get_all_socks5_proxies()
+    if not tor and not socks5:
+        return "1 (direct)"
+    parts = []
+    if tor:
+        parts.append("5 Tor")
+    if socks5:
+        parts.append(f"{len(socks5)} SOCKS5")
+    return " + ".join(parts)
