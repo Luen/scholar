@@ -30,6 +30,7 @@ from src.doi_utils import normalize_doi  # noqa: E402
 from src.scholar_citations import (  # noqa: E402
     fetch_altmetric_score,
     fetch_google_scholar_citations,
+    list_cached_dois_with_scholar_cache,
     list_cached_dois_with_warning,
     list_cached_successful_dois,
     list_cached_successful_dois_older_than,
@@ -89,10 +90,11 @@ def main() -> int:
     all_dois = _all_dois_from_scholar_data()
     successful = list_cached_successful_dois()
     with_warning = list_cached_dois_with_warning()
+    with_scholar_cache = list_cached_dois_with_scholar_cache()
     stale = list_cached_successful_dois_older_than(STALE_SECONDS)
 
-    # Phase 1 (every run): missing + blocked/warning — refetch on each run
-    missing = all_dois - successful
+    # Phase 1 (every run): no scholar cache yet + blocked/warning — refetch. Skip DOIs that already have scholar cache (e.g. 401) so they are not refetched every run.
+    missing = all_dois - successful - with_scholar_cache
     refetch = missing | with_warning
 
     if not all_dois:

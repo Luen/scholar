@@ -125,6 +125,23 @@ def list_cached_successful_dois() -> set[str]:
     return dois
 
 
+def list_cached_dois_with_scholar_cache() -> set[str]:
+    """Return DOIs that have a scholar cache file (any result, including found=False). Used to avoid refetching 401s every run."""
+    dois: set[str] = set()
+    if not os.path.isdir(CACHE_DIR):
+        return dois
+    prefix = "scholar_"
+    for name in os.listdir(CACHE_DIR):
+        if not name.startswith(prefix) or not name.endswith(".json"):
+            continue
+        # Reverse _normalize_doi_for_cache: safe was doi.replace("/", "_").replace(":", "_")
+        safe = name[len(prefix) : -len(".json")]
+        doi = safe.replace("_", "/")
+        if doi:
+            dois.add(normalize_doi(doi))
+    return dois
+
+
 def list_cached_dois_with_warning() -> set[str]:
     """Return DOIs that have a cache entry with a warning (blocked/failed); retry these each run."""
     dois: set[str] = set()
