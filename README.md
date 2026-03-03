@@ -179,6 +179,8 @@ docker exec scholar_web python -u scripts/revalidate_scholar_citations.py
 - **Phase 1 (every run):** Refetches DOIs with no cache or with a blocked/warning cache (missing or previously failed), so they are retried on each daily run.
 - **Phase 2 (only after 7 days):** Revalidates DOIs that have successful cache older than a week.
 
+To **remove DOIs from the data and cache** so they no longer appear or get refetched, run `scripts/remove_dois_from_data_and_cache.py DOI [DOI ...]` (e.g. `docker exec scholar_web python scripts/remove_dois_from_data_and_cache.py 10.1093/conphys/coab030 10.14288/1.0071389`).
+
 Neither phase uses `force_refresh`, so if a request is blocked you keep existing cache. Run manually after fixing proxies to fill in missing DOIs.
 
 ## Project structure

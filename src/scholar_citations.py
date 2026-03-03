@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 # so every proxy would otherwise see the same cached response (keyed by URL only).
 try:
     import requests_cache
+
     _OriginalSession = getattr(requests_cache, "OriginalSession", requests.Session)
 except ImportError:
     _OriginalSession = requests.Session
@@ -42,17 +43,20 @@ def _invalidate_scholar_url_from_http_cache(url: str) -> None:
     """Remove this Scholar URL from the global HTTP cache so the next request is fresh."""
     try:
         import requests_cache
+
         if not requests_cache.is_installed():
             return
         cache = requests_cache.get_cache()
         if cache is None:
             return
         from requests import Request
+
         key = requests_cache.create_key(Request("GET", url))
         cache.delete(key)
         logger.debug("Invalidated HTTP cache entry for Scholar URL (blocked response)")
     except Exception:  # noqa: S110
         pass
+
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
