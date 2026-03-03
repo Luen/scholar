@@ -25,13 +25,34 @@ from .proxy_config import get_request_proxy_chain, get_request_proxy_chain_summa
 
 logger = logging.getLogger(__name__)
 
-# Plain (uncached) session for Scholar requests.
-# requests_cache.install_cache() monkey-patches requests.get() globally, which
-# causes every proxy attempt to return the same cached response keyed by URL
-# (ignoring the proxy).  Using a vanilla Session bypasses that cache entirely.
-_scholar_session = requests.Session()
+# Scholar uses an uncached session so each proxy attempt gets a real request.
+# requests_cache.install_cache() replaces requests.Session with CachedSession,
+# so every proxy would otherwise see the same cached response (keyed by URL only).
+try:
+    import requests_cache
+    _OriginalSession = getattr(requests_cache, "OriginalSession", requests.Session)
+except ImportError:
+    _OriginalSession = requests.Session
+_scholar_session = _OriginalSession()
 _scholar_session.mount("https://", requests.adapters.HTTPAdapter(max_retries=0))
 _scholar_session.mount("http://", requests.adapters.HTTPAdapter(max_retries=0))
+
+
+def _invalidate_scholar_url_from_http_cache(url: str) -> None:
+    """Remove this Scholar URL from the global HTTP cache so the next request is fresh."""
+    try:
+        import requests_cache
+        if not requests_cache.is_installed():
+            return
+        cache = requests_cache.get_cache()
+        if cache is None:
+            return
+        from requests import Request
+        key = requests_cache.create_key(Request("GET", url))
+        cache.delete(key)
+        logger.debug("Invalidated HTTP cache entry for Scholar URL (blocked response)")
+    except Exception:  # noqa: S110
+        pass
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -245,6 +266,7 @@ def _scholar_search(
             resp.status_code,
             (resp.text or "").strip()[:500],
         )
+        _invalidate_scholar_url_from_http_cache(resp.url or url)
         return None
     soup = BeautifulSoup(resp.text, "html.parser")
     return _parse_scholar_citations(soup)
