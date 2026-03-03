@@ -283,8 +283,15 @@ def _is_blocked_response(html: str, url: str) -> bool:
     if "scholar.google.com" not in url:
         return True
     lower = html.lower()
-    # Normal Scholar result pages contain one of these; if present, not a block page
-    if "cited by" in lower or "did not match any articles" in lower:
+    # Normal Scholar result pages (or consent/cookie wall) contain one of these; if present, not a block page
+    _valid_signals = (
+        "cited by",
+        "did not match any articles",
+        "your search",  # "Your search - ... - did not match any articles"
+        "before you continue",  # consent/cookie wall
+        "we use cookies",
+    )
+    if any(s in lower for s in _valid_signals):
         return False
     # Block signals (captcha/recaptcha can appear in scripts on normal pages, so only block
     # when we don't have valid result content above)
