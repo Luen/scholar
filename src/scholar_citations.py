@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from urllib.parse import quote
 
 import requests
+import requests.adapters
 from bs4 import BeautifulSoup
 
 from .altmetric import fetch_altmetric_details
@@ -23,6 +24,14 @@ from .doi_utils import normalize_doi
 from .proxy_config import get_request_proxy_chain, get_request_proxy_chain_summary
 
 logger = logging.getLogger(__name__)
+
+# Plain (uncached) session for Scholar requests.
+# requests_cache.install_cache() monkey-patches requests.get() globally, which
+# causes every proxy attempt to return the same cached response keyed by URL
+# (ignoring the proxy).  Using a vanilla Session bypasses that cache entirely.
+_scholar_session = requests.Session()
+_scholar_session.mount("https://", requests.adapters.HTTPAdapter(max_retries=0))
+_scholar_session.mount("http://", requests.adapters.HTTPAdapter(max_retries=0))
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -220,7 +229,7 @@ def _scholar_search(
     """
     url = f"{GOOGLE_SCHOLAR_BASE}?hl=en&as_sdt=0%2C5&q={quote(query)}&btnG="
     try:
-        resp = requests.get(url, headers=headers, timeout=30, proxies=proxies)
+        resp = _scholar_session.get(url, headers=headers, timeout=30, proxies=proxies)
     except requests.RequestException:
         raise
     if not resp.ok:
@@ -231,10 +240,10 @@ def _scholar_search(
     if _is_blocked_response(resp.text, resp.url or url):
         logger.warning("Google Scholar appears to be blocking requests (CAPTCHA/IP block)")
         logger.debug(
-            "Blocked response: url=%s status=%s body_snippet=%.80s",
+            "Blocked response: url=%s status=%s body_snippet=%.500s",
             resp.url,
             resp.status_code,
-            (resp.text or "").strip()[:200],
+            (resp.text or "").strip()[:500],
         )
         return None
     soup = BeautifulSoup(resp.text, "html.parser")
