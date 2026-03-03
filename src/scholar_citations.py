@@ -279,8 +279,15 @@ def _scholar_search_with_proxy_retries(query: str, headers: dict) -> tuple[int |
 
 
 def _is_blocked_response(html: str, url: str) -> bool:
-    """Detect if Google Scholar has blocked the request."""
+    """Detect if Google Scholar has blocked the request (CAPTCHA / rate limit page)."""
+    if "scholar.google.com" not in url:
+        return True
     lower = html.lower()
+    # Normal Scholar result pages contain one of these; if present, not a block page
+    if "cited by" in lower or "did not match any articles" in lower:
+        return False
+    # Block signals (captcha/recaptcha can appear in scripts on normal pages, so only block
+    # when we don't have valid result content above)
     if "captcha" in lower or "recaptcha" in lower:
         return True
     if any(
@@ -292,8 +299,6 @@ def _is_blocked_response(html: str, url: str) -> bool:
             "sorry, we have detected",
         )
     ):
-        return True
-    if "scholar.google.com" not in url:
         return True
     return False
 
