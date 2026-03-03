@@ -288,6 +288,9 @@ def _is_blocked_response(html: str, url: str) -> bool:
         "cited by",
         "did not match any articles",
         "your search",  # "Your search - ... - did not match any articles"
+        "showing the best result",  # single-result layout
+        "see all results",
+        "related articles",
         "before you continue",  # consent/cookie wall
         "we use cookies",
     )
