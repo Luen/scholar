@@ -2,7 +2,39 @@
 
 import pytest
 
-from src.crossref import CrossrefResponse, fetch_crossref_details, search_doi_by_title
+from src.crossref import (
+    CrossrefResponse,
+    crossref_response_from_message,
+    fetch_crossref_details,
+    search_doi_by_title,
+)
+
+
+def test_crossref_response_from_message_empty_returns_none():
+    """Empty or invalid input returns None."""
+    assert crossref_response_from_message({}) is None
+    assert crossref_response_from_message(None) is None  # type: ignore[arg-type]
+
+
+def test_crossref_response_from_message_parses_minimal_message():
+    """Parse a minimal Crossref API message into CrossrefResponse."""
+    message = {
+        "title": ["Test Paper"],
+        "container-title": ["Test Journal"],
+        "author": [{"given": "Jane", "family": "Doe"}, {"given": "John", "family": "Smith"}],
+        "issued": {"date-parts": [[2023, 6, 15]]},
+        "URL": "https://example.com/doi/10.1234/test",
+        "is-referenced-by-count": 42,
+    }
+    result = crossref_response_from_message(message)
+    assert result is not None
+    assert isinstance(result, CrossrefResponse)
+    assert result.title == "Test Paper"
+    assert result.journal == "Test Journal"
+    assert result.authors == ["Jane Doe", "John Smith"]
+    assert result.year == 2023
+    assert result.url == "https://example.com/doi/10.1234/test"
+    assert result.citation_count == 42
 
 
 def test_search_doi_by_title_empty_title():

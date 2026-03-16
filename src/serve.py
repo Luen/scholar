@@ -13,6 +13,7 @@ import src.cache_config  # noqa: F401 - configure HTTP cache before requests
 from .doi_utils import normalize_doi
 from .scholar_citations import (
     fetch_altmetric_score,
+    fetch_crossref_for_api,
     fetch_google_scholar_citations,
 )
 
@@ -231,6 +232,42 @@ def get_google_citations(doi: str):
     }
     if result.warning:
         data["warning"] = result.warning
+    resp = jsonify(data)
+    resp.headers.update(headers)
+    return resp
+
+
+@app.route("/crossref/<path:doi>", methods=["GET"])
+def get_crossref(doi: str):
+    """
+    Fetch Crossref works API data for a DOI. Cached for 1 month.
+    Returns the full Crossref API response (status, message-type, message).
+    Query param ?refresh=1 (dev only) forces a fresh fetch.
+    """
+    normalized_doi, err = _validate_doi_for_api(doi)
+    if err:
+        resp = jsonify({"error": err})
+        resp.headers["Cache-Control"] = "no-store"
+        return resp, 400
+    doi = normalized_doi
+    force_refresh = request.args.get("refresh") == "1"  # dev only
+    result = fetch_crossref_for_api(doi, force_refresh=force_refresh)
+    if not result.found:
+        logger.warning("Crossref API returning 404 for DOI %s: %s", doi, result.error_reason)
+        body = {"error": "DOI not found or Crossref API error"}
+        if result.error_reason:
+            body["reason"] = result.error_reason
+        resp = jsonify(body)
+        resp.headers["Cache-Control"] = "no-store"
+        return resp, 404
+    headers = _doi_cache_headers(result.last_fetch or "", result.doi)
+    etag = hashlib.sha256(f"{result.doi}:{result.last_fetch}".encode()).hexdigest()
+    if _etag_matches_request(etag, request.headers.get("If-None-Match")):
+        resp = make_response("", 304)
+        resp.headers.update(headers)
+        return resp
+    data = dict(result.data) if result.data else {}
+    data["last_fetch"] = result.last_fetch
     resp = jsonify(data)
     resp.headers.update(headers)
     return resp

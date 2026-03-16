@@ -44,18 +44,19 @@ The stack includes:
 - **web** – Flask API serving scholar data
 - **cron** – Runs the main scraper and DOI metrics revalidation on a schedule
 
-**Cron schedule** (in `cron/Dockerfile`): main scholar pipeline at 00:00 every 14 days; DOI metrics revalidation (Altmetric / Google Scholar cache) at **02:00 daily**.
+**Cron schedule** (in `cron/Dockerfile`): main scholar pipeline at 00:00 every 14 days; DOI metrics revalidation (Crossref / Altmetric / Google Scholar cache) at **02:00 daily**.
 
-Build the base image (required once; no container is created):
+Build the base image first (web and cron use it; the base container exits immediately):
 
 ```bash
 docker compose build base
 ```
 
-Start all services (web, cron; base is build-only and does not run):
+Then start all services (or build and start in one go):
 
 ```bash
 docker compose up -d
+# or, to (re)build everything: docker compose build base && docker compose up -d --build
 ```
 
 For browser-based DOI fetching on sites that block plain HTTP, the project uses [Scrapling](https://github.com/D4Vinci/Scrapling). Install browser dependencies with `scrapling install` if you use that path. News aggregation uses RSS, [NewsAPI](https://newsapi.org/), the Guardian API, [Newspaper4k](https://github.com/AndyTheFactory/newspaper4k), and other sources.
@@ -170,10 +171,10 @@ The app tries **TOR_PROXY first** (up to 3 attempts), then **each SOCKS5 proxy**
 
 ### Revalidating DOI metrics cache
 
-Refreshes Altmetric and Google Scholar data. Runs daily at 02:00 in the cron container. DOIs are read from `scholar_data` (all publications with a DOI):
+Refreshes Crossref, Altmetric, and Google Scholar cache. Runs daily at 02:00 in the cron container. DOIs are read from `scholar_data` (all publications with a DOI):
 
 ```bash
-docker exec scholar_web python -u scripts/revalidate_scholar_citations.py
+docker exec scholar_web python -u scripts/revalidate_doi_metrics.py
 ```
 
 - **Phase 1 (every run):** Refetches DOIs with no cache or with a blocked/warning cache (missing or previously failed), so they are retried on each daily run.
@@ -245,6 +246,7 @@ The API is available at `http://localhost:8000` (Docker maps 8000→5000).
 | `/scholar/<id>` | GET | Get scholar data by ID (e.g. `/scholar/ynWS968AAAAJ`) |
 | `/altmetric/<doi>` | GET | Altmetric score for a DOI (cached 2 weeks). 401 if not Rummer/Bergseth/Wu |
 | `/scholar-citations/<doi>` | GET | Google Scholar citation count for a DOI (cached 2 weeks). 401 if not Rummer/Bergseth/Wu |
+| `/crossref/<doi>` | GET | Crossref works API data for a DOI (cached 1 month). 404 if not found |
 
 ### Environment variables
 

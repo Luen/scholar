@@ -19,7 +19,11 @@ import requests.adapters
 from bs4 import BeautifulSoup
 
 from .altmetric import fetch_altmetric_details
-from .crossref import fetch_crossref_details
+from .crossref import (
+    CrossrefResponse,
+    crossref_response_from_message,
+    get_crossref_works_response,
+)
 from .doi_utils import normalize_doi
 from .proxy_config import get_request_proxy_chain, get_request_proxy_chain_summary
 
@@ -67,6 +71,7 @@ GOOGLE_SCHOLAR_BASE = "https://scholar.google.com/scholar"
 ALLOWED_AUTHORS = ("Rummer", "Bergseth", "Wu")
 CACHE_SECONDS = 14 * 24 * 60 * 60  # 2 weeks
 CACHE_SECONDS_BLOCKED_OR_WARNING = 24 * 60 * 60  # 1 day when Scholar blocked or request failed
+CACHE_SECONDS_CROSSREF = 30 * 24 * 60 * 60  # 1 month for Crossref API endpoint
 CACHE_DIR = os.environ.get("DOI_METRICS_CACHE_DIR", "")
 if not CACHE_DIR:
     base = os.environ.get("CACHE_DIR", "cache")
@@ -111,21 +116,22 @@ def _read_cache(path: str) -> tuple[dict | None, bool]:
 
 
 def list_cached_successful_dois() -> set[str]:
-    """Return DOIs that have successful cached results (found=True)."""
+    """Return DOIs that have successful scholar or altmetric cache (found=True, no warning)."""
     dois: set[str] = set()
     if not os.path.isdir(CACHE_DIR):
         return dois
-    for name in os.listdir(CACHE_DIR):
-        if not name.endswith(".json"):
-            continue
-        path = os.path.join(CACHE_DIR, name)
-        try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
-            if data.get("found") and data.get("doi"):
-                dois.add(normalize_doi(data["doi"]))
-        except (json.JSONDecodeError, OSError, KeyError):
-            continue
+    for prefix in ("scholar_", "altmetric_"):
+        for name in os.listdir(CACHE_DIR):
+            if not name.startswith(prefix) or not name.endswith(".json"):
+                continue
+            path = os.path.join(CACHE_DIR, name)
+            try:
+                with open(path, encoding="utf-8") as f:
+                    data = json.load(f)
+                if data.get("found") and data.get("doi") and not data.get("warning"):
+                    dois.add(normalize_doi(data["doi"]))
+            except (json.JSONDecodeError, OSError, KeyError):
+                continue
     return dois
 
 
@@ -147,21 +153,22 @@ def list_cached_dois_with_scholar_cache() -> set[str]:
 
 
 def list_cached_dois_with_warning() -> set[str]:
-    """Return DOIs that have a cache entry with a warning (blocked/failed); retry these each run."""
+    """Return DOIs that have a scholar or altmetric cache entry with a warning (blocked/failed)."""
     dois: set[str] = set()
     if not os.path.isdir(CACHE_DIR):
         return dois
-    for name in os.listdir(CACHE_DIR):
-        if not name.endswith(".json"):
-            continue
-        path = os.path.join(CACHE_DIR, name)
-        try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
-            if data.get("warning") and data.get("doi"):
-                dois.add(normalize_doi(data["doi"]))
-        except (json.JSONDecodeError, OSError, KeyError):
-            continue
+    for prefix in ("scholar_", "altmetric_"):
+        for name in os.listdir(CACHE_DIR):
+            if not name.startswith(prefix) or not name.endswith(".json"):
+                continue
+            path = os.path.join(CACHE_DIR, name)
+            try:
+                with open(path, encoding="utf-8") as f:
+                    data = json.load(f)
+                if data.get("warning") and data.get("doi"):
+                    dois.add(normalize_doi(data["doi"]))
+            except (json.JSONDecodeError, OSError, KeyError):
+                continue
     return dois
 
 
@@ -194,29 +201,30 @@ def touch_scholar_cache(doi: str) -> bool:
 
 
 def list_cached_successful_dois_older_than(seconds: int) -> set[str]:
-    """Return DOIs that have successful cache (found=True, no warning) older than given seconds."""
+    """Return DOIs that have successful scholar/altmetric cache (found=True, no warning) older than given seconds."""
     dois: set[str] = set()
     if not os.path.isdir(CACHE_DIR):
         return dois
     now = datetime.now()
-    for name in os.listdir(CACHE_DIR):
-        if not name.endswith(".json"):
-            continue
-        path = os.path.join(CACHE_DIR, name)
-        try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
-            if not data.get("found") or not data.get("doi") or data.get("warning"):
+    for prefix in ("scholar_", "altmetric_"):
+        for name in os.listdir(CACHE_DIR):
+            if not name.startswith(prefix) or not name.endswith(".json"):
                 continue
-            fetched_at = data.get("fetched_at")
-            if not fetched_at:
+            path = os.path.join(CACHE_DIR, name)
+            try:
+                with open(path, encoding="utf-8") as f:
+                    data = json.load(f)
+                if not data.get("found") or not data.get("doi") or data.get("warning"):
+                    continue
+                fetched_at = data.get("fetched_at")
+                if not fetched_at:
+                    continue
+                fetched_dt = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
+                age_seconds = now.timestamp() - fetched_dt.timestamp()
+                if age_seconds >= seconds:
+                    dois.add(normalize_doi(data["doi"]))
+            except (json.JSONDecodeError, OSError, KeyError, ValueError):
                 continue
-            fetched_dt = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
-            age_seconds = now.timestamp() - fetched_dt.timestamp()
-            if age_seconds >= seconds:
-                dois.add(normalize_doi(data["doi"]))
-        except (json.JSONDecodeError, OSError, KeyError, ValueError):
-            continue
     return dois
 
 
@@ -375,6 +383,37 @@ def _last_fetch_from_cache(cached: dict, path: str) -> str | None:
         return None
 
 
+def get_crossref_metadata_cached(doi: str, force_refresh: bool = False) -> CrossrefResponse | None:
+    """
+    Get Crossref metadata (authors, title, etc.) for a DOI using the shared 1-month file cache.
+    Used by Altmetric and Google Scholar so they reuse the same Crossref data as the /crossref
+    endpoint instead of hitting the API separately. On cache miss, fetches from API and writes cache.
+    """
+    doi = normalize_doi(doi)
+    path = _cache_path(doi, "crossref")
+    cached, expired = _read_cache(path)
+    if not force_refresh and cached is not None and not expired:
+        if cached.get("found") and cached.get("data"):
+            message = (cached.get("data") or {}).get("message")
+            if message:
+                return crossref_response_from_message(message)
+        return None  # Cached "not found" or no message
+
+    raw = get_crossref_works_response(doi, force_refresh=force_refresh)
+    if not raw or raw.get("status") != "ok":
+        return None
+    message = raw.get("message")
+    if not message:
+        return None
+    _write_cache(
+        path,
+        {"found": True, "data": raw},
+        doi=doi,
+        cache_seconds=CACHE_SECONDS_CROSSREF,
+    )
+    return crossref_response_from_message(message)
+
+
 @dataclass
 class AltmetricResult:
     doi: str
@@ -405,8 +444,8 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
             error_reason=cached.get("error_reason"),
         )
 
-    # Crossref first: verify allowed author before fetching
-    crossref = fetch_crossref_details(doi, force_refresh=force_refresh)
+    # Crossref first (from shared 1-week cache): verify allowed author before fetching
+    crossref = get_crossref_metadata_cached(doi, force_refresh=force_refresh)
     if not crossref or not _authors_contain_allowed(crossref.authors):
         if not crossref:
             reason = "Crossref returned no metadata (API error or DOI not found)"
@@ -473,8 +512,8 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
             warning=cached.get("warning"),
         )
 
-    # Crossref first: verify allowed author and get title for fallback
-    crossref = fetch_crossref_details(doi, force_refresh=force_refresh)
+    # Crossref first (from shared 1-week cache): verify allowed author and get title for fallback
+    crossref = get_crossref_metadata_cached(doi, force_refresh=force_refresh)
     if not crossref or not _authors_contain_allowed(crossref.authors):
         if not crossref:
             reason = "Crossref returned no metadata (API error or DOI not found)"
@@ -571,3 +610,56 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
         return ScholarCitationsResult(
             doi=doi, citations=None, found=True, last_fetch=now_iso, warning=warning
         )
+
+
+@dataclass
+class CrossrefResult:
+    """Result of fetching Crossref works API for the public endpoint."""
+
+    doi: str
+    found: bool
+    data: dict | None = None  # Full Crossref API response (status, message-type, message)
+    last_fetch: str | None = None
+    error_reason: str | None = None
+
+
+def fetch_crossref_for_api(doi: str, force_refresh: bool = False) -> CrossrefResult:
+    """
+    Fetch Crossref works API data for a DOI. Cached for 1 month.
+    Returns the full API response (status, message-type, message) for the /crossref/<doi> endpoint.
+    """
+    doi = normalize_doi(doi)
+    path = _cache_path(doi, "crossref")
+    cached, expired = _read_cache(path)
+    if not force_refresh and cached is not None and not expired:
+        return CrossrefResult(
+            doi=doi,
+            found=cached.get("found", True),
+            data=cached.get("data"),
+            last_fetch=_last_fetch_from_cache(cached, path),
+            error_reason=cached.get("error_reason"),
+        )
+
+    raw = get_crossref_works_response(doi, force_refresh=force_refresh)
+    now_iso = datetime.now().isoformat()
+    if not raw or raw.get("status") != "ok":
+        reason = "Crossref API returned no data or non-OK status"
+        if not raw:
+            reason = "Crossref API error or DOI not found"
+        _write_cache(
+            path,
+            {"found": False, "data": None, "error_reason": reason},
+            doi=doi,
+            cache_seconds=CACHE_SECONDS_CROSSREF,
+        )
+        return CrossrefResult(
+            doi=doi, found=False, data=None, last_fetch=now_iso, error_reason=reason
+        )
+
+    _write_cache(
+        path,
+        {"found": True, "data": raw},
+        doi=doi,
+        cache_seconds=CACHE_SECONDS_CROSSREF,
+    )
+    return CrossrefResult(doi=doi, found=True, data=raw, last_fetch=now_iso)

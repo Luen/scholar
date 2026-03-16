@@ -2,12 +2,13 @@
 """
 Revalidate DOI metrics cache: refetch missing/blocked every run; revalidate stale weekly.
 
-Run daily via cron. Phase 1 (every run): fetch DOIs with no cache or with a
-warning/blocked cache. Phase 2 (only when cache is older than 7 days): revalidate
-DOIs that have successful cache older than a week. Uses force_refresh for
-Scholar so we actually try the proxy chain each run (otherwise cached warning
-returns immediately and SOCKS5 is never tried). Uses TOR_PROXY first (3 attempts),
-then SOCKS5_PROXIES (see .env.template).
+Run daily via cron. Phase 1 (every run): warm Crossref cache and fetch DOIs with no
+cache or with a warning/blocked cache. Phase 2 (cache older than 7 days): refresh
+Crossref cache (1-month) and revalidate scholar/altmetric. Crossref data is shared
+by the /crossref endpoint and by Altmetric/Google Scholar (author check and title).
+Uses force_refresh for Scholar so we actually try the proxy chain each run (otherwise
+cached warning returns immediately and SOCKS5 is never tried). Uses TOR_PROXY first
+(3 attempts), then SOCKS5_PROXIES (see .env.template).
 """
 
 import json
@@ -29,6 +30,7 @@ SCHOLAR_BLOCKED_ALL_PROXIES = "blocked requests on all proxies"
 from src.doi_utils import normalize_doi  # noqa: E402
 from src.scholar_citations import (  # noqa: E402
     fetch_altmetric_score,
+    fetch_crossref_for_api,
     fetch_google_scholar_citations,
     list_cached_dois_with_scholar_cache,
     list_cached_dois_with_warning,
@@ -124,6 +126,8 @@ def main() -> int:
         )
         for i, doi in enumerate(refetch_list, 1):
             try:
+                # Warm Crossref cache (1-week) so Altmetric/Scholar use it
+                fetch_crossref_for_api(doi, force_refresh=False)
                 a = fetch_altmetric_score(doi, force_refresh=False)
                 if skip_scholar:
                     s_found = False
@@ -162,6 +166,8 @@ def main() -> int:
         log.info("Phase 2: revalidating %d DOIs with cache older than 7 days", len(stale_list))
         for i, doi in enumerate(stale_list, 1):
             try:
+                # Refresh Crossref cache (1-week) for stale DOIs
+                fetch_crossref_for_api(doi, force_refresh=True)
                 a = fetch_altmetric_score(doi, force_refresh=False)
                 if skip_scholar:
                     s_found = False

@@ -103,6 +103,62 @@ def _coerce_int(value: Any) -> int | None:
         return None
 
 
+def crossref_response_from_message(message: dict[str, Any]) -> CrossrefResponse | None:
+    """
+    Build a CrossrefResponse from a Crossref API 'message' dict.
+    Used when reading from the shared file cache so we don't duplicate API parsing.
+    """
+    if not message or not isinstance(message, dict):
+        return None
+    try:
+        crossref_authors: list[str] | None = None
+        author_list = message.get("author")
+        if isinstance(author_list, list):
+            authors = []
+            for author in author_list:
+                if isinstance(author, dict):
+                    given = author.get("given", "")
+                    family = author.get("family", "")
+                    parts = [str(x).strip() for x in (given, family) if x]
+                    name = " ".join(parts).strip()
+                    if name:
+                        authors.append(name)
+            crossref_authors = authors if authors else None
+
+        year: int | None = None
+        for date_key in ("issued", "published", "published-print", "published-online"):
+            date_parts = message.get(date_key, {}).get("date-parts", [[]])
+            if isinstance(date_parts, list) and date_parts and isinstance(date_parts[0], list):
+                parts = date_parts[0]
+                if parts:
+                    year = _coerce_int(parts[0])
+                    break
+
+        title = None
+        title_list = message.get("title")
+        if isinstance(title_list, list) and title_list:
+            title = str(title_list[0]).strip() or None
+
+        journal = None
+        container = message.get("container-title")
+        if isinstance(container, list) and container:
+            journal = str(container[0]).strip() or None
+
+        url_val = message.get("URL")
+        citation_count = _coerce_int(message.get("is-referenced-by-count"))
+
+        return CrossrefResponse(
+            title=title,
+            journal=journal,
+            authors=crossref_authors,
+            year=year,
+            url=str(url_val) if url_val else None,
+            citation_count=citation_count,
+        )
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
 def search_doi_by_title(pub_title: str, author_last_name: str) -> str | None:
     """
     Search Crossref by publication title and author; return the best-matching DOI.
@@ -176,7 +232,25 @@ def search_doi_by_title(pub_title: str, author_last_name: str) -> str | None:
 def fetch_crossref_details(doi: str, force_refresh: bool = False) -> CrossrefResponse | None:
     """
     Fetch publication metadata and citation count from Crossref API.
-    Responses are cached for 1 month. force_refresh is for dev only (e.g. ?refresh=1).
+    Uses HTTP cache (30 days). For code that shares the 1-week file cache with the
+    /crossref endpoint, use get_crossref_metadata_cached() in scholar_citations instead.
+    force_refresh is for dev only (e.g. ?refresh=1).
+    """
+    raw = get_crossref_works_response(doi, force_refresh=force_refresh)
+    if not raw:
+        return None
+    message = raw.get("message")
+    if not message:
+        logger.warning("Crossref API returned no message for DOI %s", doi)
+        return None
+    return crossref_response_from_message(message)
+
+
+def get_crossref_works_response(doi: str, force_refresh: bool = False) -> dict | None:
+    """
+    Fetch the raw Crossref works API response for a DOI.
+    Returns the full JSON body (status, message-type, message) or None on failure.
+    HTTP responses are cached by the session (30 days); force_refresh uses a direct request.
     """
     doi = normalize_doi(doi)
     try:
@@ -192,66 +266,15 @@ def fetch_crossref_details(doi: str, force_refresh: bool = False) -> CrossrefRes
             resp = _crossref_session.get(url, headers=headers, timeout=30)
         if not resp.ok:
             logger.warning(
-                "Crossref API failed for DOI %s: HTTP %s %s",
+                "Crossref works API failed for DOI %s: HTTP %s %s",
                 doi,
                 resp.status_code,
                 resp.reason or "",
             )
             return None
-
-        data = resp.json()
-        message = data.get("message")
-        if not message:
-            logger.warning("Crossref API returned no message for DOI %s", doi)
-            return None
-
-        crossref_authors: list[str] | None = None
-        author_list = message.get("author")
-        if isinstance(author_list, list):
-            authors = []
-            for author in author_list:
-                if isinstance(author, dict):
-                    given = author.get("given", "")
-                    family = author.get("family", "")
-                    parts = [str(x).strip() for x in (given, family) if x]
-                    name = " ".join(parts).strip()
-                    if name:
-                        authors.append(name)
-            crossref_authors = authors if authors else None
-
-        year: int | None = None
-        for date_key in ("issued", "published", "published-print", "published-online"):
-            date_parts = message.get(date_key, {}).get("date-parts", [[]])
-            if isinstance(date_parts, list) and date_parts and isinstance(date_parts[0], list):
-                parts = date_parts[0]
-                if parts:
-                    year = _coerce_int(parts[0])
-                    break
-
-        title = None
-        title_list = message.get("title")
-        if isinstance(title_list, list) and title_list:
-            title = str(title_list[0]).strip() or None
-
-        journal = None
-        container = message.get("container-title")
-        if isinstance(container, list) and container:
-            journal = str(container[0]).strip() or None
-
-        url_val = message.get("URL")
-        citation_count = _coerce_int(message.get("is-referenced-by-count"))
-
-        return CrossrefResponse(
-            title=title,
-            journal=journal,
-            authors=crossref_authors,
-            year=year,
-            url=str(url_val) if url_val else None,
-            citation_count=citation_count,
-        )
-    except (requests.RequestException, KeyError, IndexError, TypeError) as e:
+        return resp.json()
+    except (requests.RequestException, ValueError) as e:
         if doi not in _logged_failures:
-            logger.warning("Failed to fetch Crossref data for DOI %s: %s", doi, e)
-            print_warn(f"Failed to fetch Crossref data for DOI {doi}: {e}")
+            logger.warning("Failed to fetch Crossref works for DOI %s: %s", doi, e)
             _logged_failures.add(doi)
         return None

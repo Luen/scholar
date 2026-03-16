@@ -72,12 +72,12 @@ def main() -> int:
     else:
         print(f"Scholar data dir not found: {data_dir}", file=sys.stderr)
 
-    # DOI metrics cache (scholar_*.json, altmetric_*.json)
+    # DOI metrics cache (scholar_*.json, altmetric_*.json, crossref_*.json)
     removed_from_cache = 0
     if os.path.isdir(CACHE_DIR):
         for doi in to_remove:
             safe = _normalize_doi_for_cache(doi)
-            for prefix in ("scholar", "altmetric"):
+            for prefix in ("scholar", "altmetric", "crossref"):
                 p = os.path.join(CACHE_DIR, f"{prefix}_{safe}.json")
                 if os.path.isfile(p):
                     try:
