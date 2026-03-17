@@ -83,8 +83,16 @@ def _normalize_doi_for_cache(doi: str) -> str:
     return doi.replace("/", "_").replace(":", "_").strip()
 
 
-def _authors_contain_allowed(authors: list[str] | None) -> bool:
-    """Return True if any author family name contains Rummer, Bergseth, or Wu."""
+def _authors_contain_allowed(
+    authors: list[str] | None,
+    author_families: list[str] | None = None,
+) -> bool:
+    """Return True if any author family name is Rummer, Bergseth, or Wu (or contained in full names)."""
+    # Prefer explicit family names from Crossref (e.g. "Wu" from author[].family)
+    if author_families:
+        combined_families = " ".join(author_families).lower()
+        if any(a.lower() in combined_families for a in ALLOWED_AUTHORS):
+            return True
     if not authors:
         return False
     combined = " ".join(authors).lower()
@@ -435,18 +443,38 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
     path = _cache_path(doi, "altmetric")
     cached, expired = _read_cache(path)
     if not force_refresh and cached is not None and not expired:
-        return AltmetricResult(
-            doi=doi,
-            score=cached.get("score"),
-            found=cached.get("found", True),
-            details=cached.get("details"),
-            last_fetch=_last_fetch_from_cache(cached, path),
-            error_reason=cached.get("error_reason"),
-        )
+        # If we have a cached 401, re-check Crossref; author may have been added or cache was stale
+        if cached.get("found") is False and cached.get("error_reason") == "Author not in allowlist":
+            crossref_recheck = get_crossref_metadata_cached(doi, force_refresh=False)
+            if crossref_recheck and _authors_contain_allowed(
+                crossref_recheck.authors, crossref_recheck.author_families
+            ):
+                # Crossref now has an allowed author; fall through to refetch and refresh cache
+                pass
+            else:
+                return AltmetricResult(
+                    doi=doi,
+                    score=cached.get("score"),
+                    found=False,
+                    details=cached.get("details"),
+                    last_fetch=_last_fetch_from_cache(cached, path),
+                    error_reason=cached.get("error_reason"),
+                )
+        else:
+            return AltmetricResult(
+                doi=doi,
+                score=cached.get("score"),
+                found=cached.get("found", True),
+                details=cached.get("details"),
+                last_fetch=_last_fetch_from_cache(cached, path),
+                error_reason=cached.get("error_reason"),
+            )
 
-    # Crossref first (from shared 1-week cache): verify allowed author before fetching
+    # Crossref (from shared 1-month cache): verify allowed author before fetching
     crossref = get_crossref_metadata_cached(doi, force_refresh=force_refresh)
-    if not crossref or not _authors_contain_allowed(crossref.authors):
+    if not crossref or not _authors_contain_allowed(
+        crossref.authors, crossref.author_families
+    ):
         if not crossref:
             reason = "Crossref returned no metadata (API error or DOI not found)"
             logger.warning("Altmetric 401 for DOI %s: %s", doi, reason)
@@ -503,18 +531,37 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
     path = _cache_path(doi, "scholar")
     cached, expired = _read_cache(path)
     if not force_refresh and cached is not None and not expired:
-        return ScholarCitationsResult(
-            doi=doi,
-            citations=cached.get("citations"),
-            found=cached.get("found", True),
-            last_fetch=_last_fetch_from_cache(cached, path),
-            error_reason=cached.get("error_reason"),
-            warning=cached.get("warning"),
-        )
+        # If we have a cached 401, re-check Crossref; author may have been added or cache was stale
+        if cached.get("found") is False and cached.get("error_reason") and "allowlist" in (cached.get("error_reason") or ""):
+            crossref_recheck = get_crossref_metadata_cached(doi, force_refresh=False)
+            if crossref_recheck and _authors_contain_allowed(
+                crossref_recheck.authors, crossref_recheck.author_families
+            ):
+                pass  # Fall through to refetch and refresh cache
+            else:
+                return ScholarCitationsResult(
+                    doi=doi,
+                    citations=cached.get("citations"),
+                    found=False,
+                    last_fetch=_last_fetch_from_cache(cached, path),
+                    error_reason=cached.get("error_reason"),
+                    warning=cached.get("warning"),
+                )
+        else:
+            return ScholarCitationsResult(
+                doi=doi,
+                citations=cached.get("citations"),
+                found=cached.get("found", True),
+                last_fetch=_last_fetch_from_cache(cached, path),
+                error_reason=cached.get("error_reason"),
+                warning=cached.get("warning"),
+            )
 
-    # Crossref first (from shared 1-week cache): verify allowed author and get title for fallback
+    # Crossref (from shared 1-month cache): verify allowed author and get title for fallback
     crossref = get_crossref_metadata_cached(doi, force_refresh=force_refresh)
-    if not crossref or not _authors_contain_allowed(crossref.authors):
+    if not crossref or not _authors_contain_allowed(
+        crossref.authors, crossref.author_families
+    ):
         if not crossref:
             reason = "Crossref returned no metadata (API error or DOI not found)"
             logger.warning("Google Scholar 401 for DOI %s: %s", doi, reason)

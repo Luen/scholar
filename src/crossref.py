@@ -88,6 +88,7 @@ class CrossrefResponse:
     title: str | None = None
     journal: str | None = None
     authors: list[str] | None = None
+    author_families: list[str] | None = None  # Family names only; used for allowlist check
     year: int | None = None
     url: str | None = None
     citation_count: int | None = None
@@ -112,18 +113,23 @@ def crossref_response_from_message(message: dict[str, Any]) -> CrossrefResponse 
         return None
     try:
         crossref_authors: list[str] | None = None
+        crossref_families: list[str] | None = None
         author_list = message.get("author")
         if isinstance(author_list, list):
             authors = []
+            families = []
             for author in author_list:
                 if isinstance(author, dict):
                     given = author.get("given", "")
                     family = author.get("family", "")
+                    if family:
+                        families.append(str(family).strip())
                     parts = [str(x).strip() for x in (given, family) if x]
                     name = " ".join(parts).strip()
                     if name:
                         authors.append(name)
             crossref_authors = authors if authors else None
+            crossref_families = families if families else None
 
         year: int | None = None
         for date_key in ("issued", "published", "published-print", "published-online"):
@@ -151,6 +157,7 @@ def crossref_response_from_message(message: dict[str, Any]) -> CrossrefResponse 
             title=title,
             journal=journal,
             authors=crossref_authors,
+            author_families=crossref_families,
             year=year,
             url=str(url_val) if url_val else None,
             citation_count=citation_count,

@@ -32,6 +32,7 @@ def test_crossref_response_from_message_parses_minimal_message():
     assert result.title == "Test Paper"
     assert result.journal == "Test Journal"
     assert result.authors == ["Jane Doe", "John Smith"]
+    assert result.author_families == ["Doe", "Smith"]
     assert result.year == 2023
     assert result.url == "https://example.com/doi/10.1234/test"
     assert result.citation_count == 42
