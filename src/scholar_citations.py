@@ -501,9 +501,7 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
 
     # Crossref (from shared 1-month cache): verify allowed author before fetching
     crossref = get_crossref_metadata_cached(doi, force_refresh=force_refresh)
-    if not crossref or not _authors_contain_allowed(
-        crossref.authors, crossref.author_families
-    ):
+    if not crossref or not _authors_contain_allowed(crossref.authors, crossref.author_families):
         if not crossref:
             reason = "Crossref returned no metadata (API error or DOI not found)"
             logger.warning("Altmetric 401 for DOI %s: %s", doi, reason)
@@ -516,11 +514,7 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
                 (crossref.authors or [])[:10],
             )
         now_iso = datetime.now().isoformat()
-        result_code = (
-            FETCH_RESULT_AUTHOR_NOT_ALLOWED
-            if crossref
-            else FETCH_RESULT_NOT_FOUND
-        )
+        result_code = FETCH_RESULT_AUTHOR_NOT_ALLOWED if crossref else FETCH_RESULT_NOT_FOUND
         _write_cache(
             path,
             {
@@ -553,7 +547,12 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
     now_iso = datetime.now().isoformat()
     _write_cache(
         path,
-        {"found": True, "score": score, "details": details_dict, "last_fetched_result": FETCH_RESULT_SUCCESS},
+        {
+            "found": True,
+            "score": score,
+            "details": details_dict,
+            "last_fetched_result": FETCH_RESULT_SUCCESS,
+        },
         doi=doi,
     )
     return AltmetricResult(
@@ -574,7 +573,9 @@ class ScholarCitationsResult:
     found: bool
     last_fetch: str | None = None  # ISO timestamp when data was last fetched
     last_successful_fetch: str | None = None  # When we last had found=True with citations
-    last_fetched_result: str | None = None  # success | author_not_allowed | not_found | blocked | error
+    last_fetched_result: str | None = (
+        None  # success | author_not_allowed | not_found | blocked | error
+    )
     error_reason: str | None = None  # When found=False: why (for API JSON)
     warning: str | None = None  # When found=True but citations=None: e.g. Scholar blocked
 
@@ -591,7 +592,11 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
     cached, expired = _read_cache(path)
     if not force_refresh and cached is not None and not expired:
         # If we have a cached 401, re-check Crossref; author may have been added or cache was stale
-        if cached.get("found") is False and cached.get("error_reason") and "allowlist" in (cached.get("error_reason") or ""):
+        if (
+            cached.get("found") is False
+            and cached.get("error_reason")
+            and "allowlist" in (cached.get("error_reason") or "")
+        ):
             crossref_recheck = get_crossref_metadata_cached(doi, force_refresh=False)
             if crossref_recheck and _authors_contain_allowed(
                 crossref_recheck.authors, crossref_recheck.author_families
@@ -622,9 +627,7 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
 
     # Crossref (from shared 1-month cache): verify allowed author and get title for fallback
     crossref = get_crossref_metadata_cached(doi, force_refresh=force_refresh)
-    if not crossref or not _authors_contain_allowed(
-        crossref.authors, crossref.author_families
-    ):
+    if not crossref or not _authors_contain_allowed(crossref.authors, crossref.author_families):
         if not crossref:
             reason = "Crossref returned no metadata (API error or DOI not found)"
             logger.warning("Google Scholar 401 for DOI %s: %s", doi, reason)
@@ -637,11 +640,7 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
                 (crossref.authors or [])[:10],
             )
         now_iso = datetime.now().isoformat()
-        result_code = (
-            FETCH_RESULT_AUTHOR_NOT_ALLOWED
-            if crossref
-            else FETCH_RESULT_NOT_FOUND
-        )
+        result_code = FETCH_RESULT_AUTHOR_NOT_ALLOWED if crossref else FETCH_RESULT_NOT_FOUND
         _write_cache(
             path,
             {
