@@ -182,8 +182,6 @@ docker exec scholar_web python -u scripts/revalidate_doi_metrics.py
 
 To **remove DOIs from the data and cache** so they no longer appear or get refetched, run `scripts/remove_dois_from_data_and_cache.py DOI [DOI ...]` (e.g. `docker exec scholar_web python scripts/remove_dois_from_data_and_cache.py 10.1093/conphys/coab030 10.14288/1.0071389`).
 
-**One-off migration:** If you deployed the cache schema that adds `last_fetched_result` and `last_successful_fetch`, run once: `python scripts/migrate_doi_metrics_cache.py` (or `docker exec scholar_web python scripts/migrate_doi_metrics_cache.py`). Use `--dry-run` to preview. Idempotent.
-
 Neither phase uses `force_refresh`, so if a request is blocked you keep existing cache. Run manually after fixing proxies to fill in missing DOIs.
 
 ## Project structure
