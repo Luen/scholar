@@ -72,6 +72,13 @@ ALLOWED_AUTHORS = ("Rummer", "Bergseth", "Wu")
 CACHE_SECONDS = 14 * 24 * 60 * 60  # 2 weeks
 CACHE_SECONDS_BLOCKED_OR_WARNING = 24 * 60 * 60  # 1 day when Scholar blocked or request failed
 CACHE_SECONDS_CROSSREF = 30 * 24 * 60 * 60  # 1 month for Crossref API endpoint
+
+# Result of last fetch; stored in cache for debugging and revalidation
+FETCH_RESULT_SUCCESS = "success"
+FETCH_RESULT_AUTHOR_NOT_ALLOWED = "author_not_allowed"
+FETCH_RESULT_NOT_FOUND = "not_found"
+FETCH_RESULT_BLOCKED = "blocked"
+FETCH_RESULT_ERROR = "error"
 CACHE_DIR = os.environ.get("DOI_METRICS_CACHE_DIR", "")
 if not CACHE_DIR:
     base = os.environ.get("CACHE_DIR", "cache")
@@ -236,7 +243,17 @@ def list_cached_successful_dois_older_than(seconds: int) -> set[str]:
     return dois
 
 
-def _write_cache(path: str, value: dict, doi: str = "", cache_seconds: int | None = None) -> None:
+def _write_cache(
+    path: str,
+    value: dict,
+    doi: str = "",
+    cache_seconds: int | None = None,
+    previous_cached: dict | None = None,
+) -> None:
+    """
+    Write cache entry. value should include last_fetched_result.
+    When last_fetched_result != success, last_successful_fetch is preserved from previous_cached.
+    """
     now = datetime.now()
     ttl = cache_seconds if cache_seconds is not None else CACHE_SECONDS
     expires = now + timedelta(seconds=ttl)
@@ -246,6 +263,12 @@ def _write_cache(path: str, value: dict, doi: str = "", cache_seconds: int | Non
         "fetched_at": now.isoformat(),
         "doi": doi,
     }
+    if data.get("last_fetched_result") == FETCH_RESULT_SUCCESS:
+        data["last_successful_fetch"] = now.isoformat()
+    elif previous_cached is not None:
+        prev = previous_cached.get("last_successful_fetch")
+        if prev:
+            data["last_successful_fetch"] = prev
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f)
@@ -415,7 +438,7 @@ def get_crossref_metadata_cached(doi: str, force_refresh: bool = False) -> Cross
         return None
     _write_cache(
         path,
-        {"found": True, "data": raw},
+        {"found": True, "data": raw, "last_fetched_result": FETCH_RESULT_SUCCESS},
         doi=doi,
         cache_seconds=CACHE_SECONDS_CROSSREF,
     )
@@ -429,6 +452,8 @@ class AltmetricResult:
     found: bool  # True if authors validated
     details: dict | None = None  # Full Altmetric data for API response
     last_fetch: str | None = None  # ISO timestamp when data was last fetched
+    last_successful_fetch: str | None = None  # When we last had found=True
+    last_fetched_result: str | None = None  # success | author_not_allowed | not_found | error
     error_reason: str | None = None  # When found=False: why (for API JSON)
 
 
@@ -458,6 +483,8 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
                     found=False,
                     details=cached.get("details"),
                     last_fetch=_last_fetch_from_cache(cached, path),
+                    last_successful_fetch=cached.get("last_successful_fetch"),
+                    last_fetched_result=cached.get("last_fetched_result"),
                     error_reason=cached.get("error_reason"),
                 )
         else:
@@ -467,6 +494,8 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
                 found=cached.get("found", True),
                 details=cached.get("details"),
                 last_fetch=_last_fetch_from_cache(cached, path),
+                last_successful_fetch=cached.get("last_successful_fetch"),
+                last_fetched_result=cached.get("last_fetched_result"),
                 error_reason=cached.get("error_reason"),
             )
 
@@ -487,13 +516,31 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
                 (crossref.authors or [])[:10],
             )
         now_iso = datetime.now().isoformat()
+        result_code = (
+            FETCH_RESULT_AUTHOR_NOT_ALLOWED
+            if crossref
+            else FETCH_RESULT_NOT_FOUND
+        )
         _write_cache(
             path,
-            {"found": False, "score": None, "details": None, "error_reason": reason},
+            {
+                "found": False,
+                "score": None,
+                "details": None,
+                "error_reason": reason,
+                "last_fetched_result": result_code,
+            },
             doi=doi,
+            previous_cached=cached if cached is not None else None,
         )
         return AltmetricResult(
-            doi=doi, score=None, found=False, details=None, last_fetch=now_iso, error_reason=reason
+            doi=doi,
+            score=None,
+            found=False,
+            details=None,
+            last_fetch=now_iso,
+            last_fetched_result=result_code,
+            error_reason=reason,
         )
 
     details = fetch_altmetric_details(doi)
@@ -504,9 +551,19 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
         details_dict = {"doi": doi, "score": None}
         score = None
     now_iso = datetime.now().isoformat()
-    _write_cache(path, {"found": True, "score": score, "details": details_dict}, doi=doi)
+    _write_cache(
+        path,
+        {"found": True, "score": score, "details": details_dict, "last_fetched_result": FETCH_RESULT_SUCCESS},
+        doi=doi,
+    )
     return AltmetricResult(
-        doi=doi, score=score, found=True, details=details_dict, last_fetch=now_iso
+        doi=doi,
+        score=score,
+        found=True,
+        details=details_dict,
+        last_fetch=now_iso,
+        last_successful_fetch=now_iso,
+        last_fetched_result=FETCH_RESULT_SUCCESS,
     )
 
 
@@ -516,6 +573,8 @@ class ScholarCitationsResult:
     citations: int | None
     found: bool
     last_fetch: str | None = None  # ISO timestamp when data was last fetched
+    last_successful_fetch: str | None = None  # When we last had found=True with citations
+    last_fetched_result: str | None = None  # success | author_not_allowed | not_found | blocked | error
     error_reason: str | None = None  # When found=False: why (for API JSON)
     warning: str | None = None  # When found=True but citations=None: e.g. Scholar blocked
 
@@ -544,6 +603,8 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
                     citations=cached.get("citations"),
                     found=False,
                     last_fetch=_last_fetch_from_cache(cached, path),
+                    last_successful_fetch=cached.get("last_successful_fetch"),
+                    last_fetched_result=cached.get("last_fetched_result"),
                     error_reason=cached.get("error_reason"),
                     warning=cached.get("warning"),
                 )
@@ -553,6 +614,8 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
                 citations=cached.get("citations"),
                 found=cached.get("found", True),
                 last_fetch=_last_fetch_from_cache(cached, path),
+                last_successful_fetch=cached.get("last_successful_fetch"),
+                last_fetched_result=cached.get("last_fetched_result"),
                 error_reason=cached.get("error_reason"),
                 warning=cached.get("warning"),
             )
@@ -574,13 +637,29 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
                 (crossref.authors or [])[:10],
             )
         now_iso = datetime.now().isoformat()
+        result_code = (
+            FETCH_RESULT_AUTHOR_NOT_ALLOWED
+            if crossref
+            else FETCH_RESULT_NOT_FOUND
+        )
         _write_cache(
             path,
-            {"found": False, "citations": None, "error_reason": reason},
+            {
+                "found": False,
+                "citations": None,
+                "error_reason": reason,
+                "last_fetched_result": result_code,
+            },
             doi=doi,
+            previous_cached=cached if cached is not None else None,
         )
         return ScholarCitationsResult(
-            doi=doi, citations=None, found=False, last_fetch=now_iso, error_reason=reason
+            doi=doi,
+            citations=None,
+            found=False,
+            last_fetch=now_iso,
+            last_fetched_result=result_code,
+            error_reason=reason,
         )
 
     headers = {
@@ -605,25 +684,41 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
                         "found": True,
                         "citations": cached.get("citations"),
                         "warning": cached.get("warning") or warning,
+                        "last_fetched_result": FETCH_RESULT_BLOCKED,
                     },
                     doi=doi,
                     cache_seconds=CACHE_SECONDS_BLOCKED_OR_WARNING,
+                    previous_cached=cached,
                 )
                 return ScholarCitationsResult(
                     doi=doi,
                     citations=cached.get("citations"),
                     found=True,
                     last_fetch=now_iso,
+                    last_successful_fetch=cached.get("last_successful_fetch"),
+                    last_fetched_result=FETCH_RESULT_BLOCKED,
                     warning=cached.get("warning") or warning,
                 )
             _write_cache(
                 path,
-                {"found": True, "citations": None, "warning": warning},
+                {
+                    "found": True,
+                    "citations": None,
+                    "warning": warning,
+                    "last_fetched_result": FETCH_RESULT_BLOCKED,
+                },
                 doi=doi,
                 cache_seconds=CACHE_SECONDS_BLOCKED_OR_WARNING,
+                previous_cached=cached if cached is not None else None,
             )
             return ScholarCitationsResult(
-                doi=doi, citations=None, found=True, last_fetch=now_iso, warning=warning
+                doi=doi,
+                citations=None,
+                found=True,
+                last_fetch=now_iso,
+                last_successful_fetch=cached.get("last_successful_fetch") if cached else None,
+                last_fetched_result=FETCH_RESULT_BLOCKED,
+                warning=warning,
             )
 
         citations, no_results = result
@@ -641,21 +736,48 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
                     )
 
         now_iso = datetime.now().isoformat()
-        _write_cache(path, {"found": True, "citations": citations}, doi=doi)
-        return ScholarCitationsResult(doi=doi, citations=citations, found=True, last_fetch=now_iso)
+        _write_cache(
+            path,
+            {"found": True, "citations": citations, "last_fetched_result": FETCH_RESULT_SUCCESS},
+            doi=doi,
+        )
+        return ScholarCitationsResult(
+            doi=doi,
+            citations=citations,
+            found=True,
+            last_fetch=now_iso,
+            last_successful_fetch=now_iso,
+            last_fetched_result=FETCH_RESULT_SUCCESS,
+        )
 
     except requests.RequestException as e:
         logger.warning("Failed to scrape Google Scholar citations for DOI %s: %s", doi, e)
         now_iso = datetime.now().isoformat()
         warning = "Google Scholar request failed (network or proxy error)"
+        # Preserve last_successful_fetch from existing cache if present
+        try:
+            prev_cached, _ = _read_cache(path)
+        except Exception:
+            prev_cached = None
         _write_cache(
             path,
-            {"found": True, "citations": None, "warning": warning},
+            {
+                "found": True,
+                "citations": None,
+                "warning": warning,
+                "last_fetched_result": FETCH_RESULT_ERROR,
+            },
             doi=doi,
             cache_seconds=CACHE_SECONDS_BLOCKED_OR_WARNING,
+            previous_cached=prev_cached,
         )
         return ScholarCitationsResult(
-            doi=doi, citations=None, found=True, last_fetch=now_iso, warning=warning
+            doi=doi,
+            citations=None,
+            found=True,
+            last_fetch=now_iso,
+            last_fetched_result=FETCH_RESULT_ERROR,
+            warning=warning,
         )
 
 
@@ -667,6 +789,8 @@ class CrossrefResult:
     found: bool
     data: dict | None = None  # Full Crossref API response (status, message-type, message)
     last_fetch: str | None = None
+    last_successful_fetch: str | None = None
+    last_fetched_result: str | None = None  # success | not_found | error
     error_reason: str | None = None
 
 
@@ -684,6 +808,8 @@ def fetch_crossref_for_api(doi: str, force_refresh: bool = False) -> CrossrefRes
             found=cached.get("found", True),
             data=cached.get("data"),
             last_fetch=_last_fetch_from_cache(cached, path),
+            last_successful_fetch=cached.get("last_successful_fetch"),
+            last_fetched_result=cached.get("last_fetched_result"),
             error_reason=cached.get("error_reason"),
         )
 
@@ -693,20 +819,39 @@ def fetch_crossref_for_api(doi: str, force_refresh: bool = False) -> CrossrefRes
         reason = "Crossref API returned no data or non-OK status"
         if not raw:
             reason = "Crossref API error or DOI not found"
+        result_code = FETCH_RESULT_ERROR if not raw else FETCH_RESULT_NOT_FOUND
         _write_cache(
             path,
-            {"found": False, "data": None, "error_reason": reason},
+            {
+                "found": False,
+                "data": None,
+                "error_reason": reason,
+                "last_fetched_result": result_code,
+            },
             doi=doi,
             cache_seconds=CACHE_SECONDS_CROSSREF,
+            previous_cached=cached if cached is not None else None,
         )
         return CrossrefResult(
-            doi=doi, found=False, data=None, last_fetch=now_iso, error_reason=reason
+            doi=doi,
+            found=False,
+            data=None,
+            last_fetch=now_iso,
+            last_fetched_result=result_code,
+            error_reason=reason,
         )
 
     _write_cache(
         path,
-        {"found": True, "data": raw},
+        {"found": True, "data": raw, "last_fetched_result": FETCH_RESULT_SUCCESS},
         doi=doi,
         cache_seconds=CACHE_SECONDS_CROSSREF,
     )
-    return CrossrefResult(doi=doi, found=True, data=raw, last_fetch=now_iso)
+    return CrossrefResult(
+        doi=doi,
+        found=True,
+        data=raw,
+        last_fetch=now_iso,
+        last_successful_fetch=now_iso,
+        last_fetched_result=FETCH_RESULT_SUCCESS,
+    )

@@ -177,6 +177,12 @@ def get_altmetric(doi: str):
         body = {"error": "Publication not found or author not in allowlist"}
         if result.error_reason:
             body["reason"] = result.error_reason
+        if result.last_fetch is not None:
+            body["last_fetch"] = result.last_fetch
+        if result.last_successful_fetch is not None:
+            body["last_successful_fetch"] = result.last_successful_fetch
+        if result.last_fetched_result is not None:
+            body["last_fetched_result"] = result.last_fetched_result
         resp = jsonify(body)
         resp.headers["Cache-Control"] = "no-store"
         return resp, 401
@@ -188,6 +194,10 @@ def get_altmetric(doi: str):
         return resp
     data = result.details if result.details else {"doi": result.doi, "score": result.score}
     data = {**data, "last_fetch": result.last_fetch}
+    if result.last_successful_fetch is not None:
+        data["last_successful_fetch"] = result.last_successful_fetch
+    if result.last_fetched_result is not None:
+        data["last_fetched_result"] = result.last_fetched_result
     resp = jsonify(data)
     resp.headers.update(headers)
     return resp
@@ -216,6 +226,12 @@ def get_google_citations(doi: str):
         body = {"error": "Publication not found or author not in allowlist"}
         if result.error_reason:
             body["reason"] = result.error_reason
+        if result.last_fetch is not None:
+            body["last_fetch"] = result.last_fetch
+        if result.last_successful_fetch is not None:
+            body["last_successful_fetch"] = result.last_successful_fetch
+        if result.last_fetched_result is not None:
+            body["last_fetched_result"] = result.last_fetched_result
         resp = jsonify(body)
         resp.headers["Cache-Control"] = "no-store"
         return resp, 401
@@ -230,6 +246,10 @@ def get_google_citations(doi: str):
         "citations": result.citations,
         "last_fetch": result.last_fetch,
     }
+    if result.last_successful_fetch is not None:
+        data["last_successful_fetch"] = result.last_successful_fetch
+    if result.last_fetched_result is not None:
+        data["last_fetched_result"] = result.last_fetched_result
     if result.warning:
         data["warning"] = result.warning
     resp = jsonify(data)
@@ -257,6 +277,12 @@ def get_crossref(doi: str):
         body = {"error": "DOI not found or Crossref API error"}
         if result.error_reason:
             body["reason"] = result.error_reason
+        if result.last_fetch is not None:
+            body["last_fetch"] = result.last_fetch
+        if result.last_successful_fetch is not None:
+            body["last_successful_fetch"] = result.last_successful_fetch
+        if result.last_fetched_result is not None:
+            body["last_fetched_result"] = result.last_fetched_result
         resp = jsonify(body)
         resp.headers["Cache-Control"] = "no-store"
         return resp, 404
@@ -268,6 +294,10 @@ def get_crossref(doi: str):
         return resp
     data = dict(result.data) if result.data else {}
     data["last_fetch"] = result.last_fetch
+    if result.last_successful_fetch is not None:
+        data["last_successful_fetch"] = result.last_successful_fetch
+    if result.last_fetched_result is not None:
+        data["last_fetched_result"] = result.last_fetched_result
     resp = jsonify(data)
     resp.headers.update(headers)
     return resp
