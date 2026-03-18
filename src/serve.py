@@ -44,6 +44,40 @@ def _scholar_file_path(scholar_id: str) -> str | None:
     return real_path
 
 
+def _load_scholar_data_or_error(scholar_id: str):
+    """
+    Load scholar JSON data from disk.
+    Returns (data, None) on success, or (None, (body, status_code)) on error.
+    """
+    if not scholar_id:
+        return None, ({"error": "Missing id"}, 400)
+    filepath = _scholar_file_path(scholar_id)
+    if not filepath:
+        return None, ({"error": "Invalid id"}, 400)
+    try:
+        with open(filepath, encoding="utf-8") as f:
+            data = json.load(f)
+        return data, None
+    except FileNotFoundError:
+        return None, ({"error": "Author not found"}, 404)
+    except json.JSONDecodeError:
+        return None, ({"error": "Invalid scholar data"}, 500)
+
+
+def _parse_pagination_args(default_limit: int = 50, max_limit: int = 200) -> tuple[int, int] | tuple[None, dict]:
+    try:
+        limit = int(request.args.get("limit", str(default_limit)))
+        offset = int(request.args.get("offset", "0"))
+    except ValueError:
+        return None, {"error": "Invalid pagination: limit/offset must be integers"}
+
+    if limit < 0 or offset < 0:
+        return None, {"error": "Invalid pagination: limit/offset must be non-negative"}
+    if limit > max_limit:
+        limit = max_limit
+    return limit, offset
+
+
 @app.route("/health", methods=["GET"])
 def health_check():
     return jsonify({"status": "healthy"}), 200
@@ -81,19 +115,117 @@ def list_scholars():
 @app.route("/scholar/<id>", methods=["GET"])
 def get_scholar(id):
     """Get scholar data by ID."""
-    if not id:
-        return jsonify({"error": "Missing id"}), 400
-    filepath = _scholar_file_path(id)
-    if not filepath:
-        return jsonify({"error": "Invalid id"}), 400
-    try:
-        with open(filepath, encoding="utf-8") as f:
-            data = json.load(f)
+    data, err = _load_scholar_data_or_error(id)
+    if err:
+        body, status = err
+        return jsonify(body), status
+
+    # Optional: allow callers to request only certain parts to keep responses small.
+    # Examples:
+    # - /scholar/<id>?parts=news
+    # - /scholar/<id>?parts=profile,news
+    parts_raw = request.args.get("parts") or request.args.get("fields")
+    if not parts_raw:
         return jsonify(data)
-    except FileNotFoundError:
-        return jsonify({"error": "Author not found"}), 404
-    except json.JSONDecodeError:
-        return jsonify({"error": "Invalid scholar data"}), 500
+
+    parts = {p.strip().lower() for p in parts_raw.split(",") if p.strip()}
+    allowed = {"profile", "news", "media", "publications", "pubs", "all"}
+    if not parts.issubset(allowed):
+        return jsonify({"error": "Invalid parts; allowed: profile, news, publications"}), 400
+
+    if "all" in parts:
+        return jsonify(data)
+
+    result: dict = {"id": id}
+
+    if "news" in parts or "media" in parts:
+        result["media"] = data.get("media", [])
+
+    if "publications" in parts or "pubs" in parts:
+        result["publications"] = data.get("publications", [])
+
+    if "profile" in parts or (parts - {"news", "media", "publications", "pubs"}):
+        # Profile = everything except the large arrays unless explicitly requested.
+        profile = dict(data)
+        if "news" not in parts and "media" not in parts:
+            profile.pop("media", None)
+        if "publications" not in parts and "pubs" not in parts:
+            profile.pop("publications", None)
+        result["profile"] = profile
+
+    return jsonify(result)
+
+
+@app.route("/scholar/<id>/news", methods=["GET"])
+def get_scholar_news(id):
+    """Get scholar news/media items only."""
+    data, err = _load_scholar_data_or_error(id)
+    if err:
+        body, status = err
+        return jsonify(body), status
+
+    items = data.get("media", []) or []
+    page = _parse_pagination_args(default_limit=25, max_limit=200)
+    if page[0] is None:
+        return jsonify(page[1]), 400
+    limit, offset = page
+    sliced = items[offset : offset + limit]
+    return jsonify(
+        {
+            "id": id,
+            "total": len(items),
+            "limit": limit,
+            "offset": offset,
+            "media": sliced,
+        }
+    )
+
+
+@app.route("/scholar/<id>/gscholar", methods=["GET"])
+def get_scholar_gscholar(id):
+    """
+    Get the Google-Scholar-derived profile data without large sub-resources.
+    By default this excludes `publications` and `media` to keep the payload cache-friendly.
+    """
+    data, err = _load_scholar_data_or_error(id)
+    if err:
+        body, status = err
+        return jsonify(body), status
+
+    include_publications = request.args.get("include_publications") == "1"
+    include_news = request.args.get("include_news") == "1"
+
+    result = dict(data)
+    if not include_publications:
+        result.pop("publications", None)
+    if not include_news:
+        result.pop("media", None)
+    return jsonify(result)
+
+
+@app.route("/scholar/<id>/publications", methods=["GET"])
+def get_scholar_publications(id):
+    """Get scholar publications only (paginated)."""
+    data, err = _load_scholar_data_or_error(id)
+    if err:
+        body, status = err
+        return jsonify(body), status
+
+    pubs = data.get("publications", []) or []
+    page = _parse_pagination_args(default_limit=50, max_limit=200)
+    if page[0] is None:
+        return jsonify(page[1]), 400
+    limit, offset = page
+    sliced = pubs[offset : offset + limit]
+    return jsonify(
+        {
+            "id": id,
+            "total": len(pubs),
+            "limit": limit,
+            "offset": offset,
+            "publications": sliced,
+        }
+    )
 
 
 # Basic DOI pattern: prefix 10. (registry) / suffix (no strict length)
