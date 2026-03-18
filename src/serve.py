@@ -16,6 +16,7 @@ from .scholar_citations import (
     fetch_crossref_for_api,
     fetch_google_scholar_citations,
 )
+from .news_filters import filter_media_items
 
 logger = logging.getLogger(__name__)
 
@@ -122,35 +123,35 @@ def get_scholar(id):
 
     # Optional: allow callers to request only certain parts to keep responses small.
     # Examples:
-    # - /scholar/<id>?parts=news
     # - /scholar/<id>?parts=profile,news
     parts_raw = request.args.get("parts") or request.args.get("fields")
     if not parts_raw:
         return jsonify(data)
 
     parts = {p.strip().lower() for p in parts_raw.split(",") if p.strip()}
-    allowed = {"profile", "news", "media", "publications", "pubs", "all"}
+    # NOTE: news/media must be fetched via /scholar/<id>/news (do not support parts=news).
+    if "news" in parts or "media" in parts:
+        return jsonify({"error": "News must be fetched via /scholar/<id>/news"}), 400
+
+    allowed = {"profile", "publications", "pubs", "all"}
     if not parts.issubset(allowed):
-        return jsonify({"error": "Invalid parts; allowed: profile, news, publications"}), 400
+        return jsonify({"error": "Invalid parts; allowed: profile, publications"}), 400
 
     if "all" in parts:
         return jsonify(data)
 
     result: dict = {"id": id}
 
-    if "news" in parts or "media" in parts:
-        result["media"] = data.get("media", [])
-
     if "publications" in parts or "pubs" in parts:
         result["publications"] = data.get("publications", [])
 
-    if "profile" in parts or (parts - {"news", "media", "publications", "pubs"}):
+    if "profile" in parts or (parts - {"publications", "pubs"}):
         # Profile = everything except the large arrays unless explicitly requested.
         profile = dict(data)
-        if "news" not in parts and "media" not in parts:
-            profile.pop("media", None)
         if "publications" not in parts and "pubs" not in parts:
             profile.pop("publications", None)
+        # Always exclude media from /scholar/<id> parts mode; use /news endpoint.
+        profile.pop("media", None)
         result["profile"] = profile
 
     return jsonify(result)
@@ -164,7 +165,7 @@ def get_scholar_news(id):
         body, status = err
         return jsonify(body), status
 
-    items = data.get("media", []) or []
+    items = filter_media_items(data.get("media", []) or [])
     page = _parse_pagination_args(default_limit=25, max_limit=200)
     if page[0] is None:
         return jsonify(page[1]), 400

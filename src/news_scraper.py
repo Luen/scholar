@@ -15,6 +15,13 @@ import pytz
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+try:
+    from scrapling.fetchers import FetcherSession  # type: ignore
+
+    _SCRAPLING_AVAILABLE = True
+except Exception:  # pragma: no cover
+    FetcherSession = None  # type: ignore
+    _SCRAPLING_AVAILABLE = False
 
 load_dotenv()
 
@@ -557,9 +564,62 @@ def cached_request(
         response._content = json.dumps(cached).encode()
         return response
 
+    def _scrapling_fallback() -> requests.Response:
+        """
+        Fallback fetch using Scrapling's static engine (browser-like TLS + headers).
+        This helps with 403 blocks and some local SSL chain issues.
+        """
+        if not _SCRAPLING_AVAILABLE or FetcherSession is None:
+            raise RuntimeError("Scrapling is not available")
+        if method.lower() != "get":
+            raise RuntimeError("Scrapling fallback only supports GET")
+
+        # Build the final URL including query params.
+        final_url = url
+        if params:
+            final_url = requests.Request("GET", url, params=params).prepare().url  # type: ignore[assignment]
+
+        # Merge headers: caller headers win.
+        merged_headers = dict(DEFAULT_HEADERS)
+        if headers:
+            merged_headers.update(headers)
+
+        with FetcherSession(
+            impersonate="chrome",
+            timeout=timeout,
+            stealthy_headers=True,
+            follow_redirects=True,
+            retries=2,
+            retry_delay=1,
+            headers=merged_headers,
+            verify=True,
+        ) as s:
+            resp = s.get(final_url)
+
+        response = requests.Response()
+        response.status_code = int(getattr(resp, "status_code", 0) or 0)
+        response.url = final_url
+        response._content = (getattr(resp, "text", "") or "").encode("utf-8", errors="ignore")
+        # Best-effort headers
+        try:
+            response.headers.update(getattr(resp, "headers", {}) or {})
+        except Exception:
+            pass
+        response.raise_for_status()
+        return response
+
     # Make the actual request
-    response = requests.request(method, url, headers=headers, params=params, timeout=timeout)
-    response.raise_for_status()
+    try:
+        response = requests.request(method, url, headers=headers, params=params, timeout=timeout)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        # Only fallback on cases where a browser-like client may help.
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        if status in (403, 429) or isinstance(e, requests.exceptions.SSLError):
+            logger.warning("requests failed for %s (%s); trying Scrapling fallback", url, e)
+            response = _scrapling_fallback()
+        else:
+            raise
 
     # Cache the response data
     try:
