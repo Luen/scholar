@@ -61,7 +61,7 @@ def favicon():
 
 @app.route("/", methods=["GET"])
 def index():
-    return "Welcome to the scholar API"
+    return "Welcome to the RummerLab API"
 
 
 @app.route("/scholars", methods=["GET"])
