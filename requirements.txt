@@ -15,4 +15,4 @@ scrapling[fetchers]>=0.4
 newspaper4k>=0.9.0
 gnews>=0.2.0
 ruff>=0.8.0
-pytest>=8.0.0
+pytest>=8.4.2
