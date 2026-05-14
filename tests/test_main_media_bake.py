@@ -41,7 +41,7 @@ def test_refresh_news_updates_media_preserves_last_fetched(tmp_path, monkeypatch
 
     monkeypatch.setattr("main.get_news_data", fake_news)
     monkeypatch.setattr("main.filter_media_items", lambda items: list(items))
-    monkeypatch.setattr("main.enrich_filtered_media_thumbnails", lambda _sid, _items: None)
+    monkeypatch.setattr("main.enrich_filtered_media_thumbnails", lambda _sid, _items: 0)
 
     assert refresh_news_to_disk(Config(scholar_id=sid)) == 0
     data = json.loads(fp.read_text(encoding="utf-8"))

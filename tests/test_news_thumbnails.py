@@ -200,6 +200,34 @@ def test_enrich_no_sleep_when_no_remote_io(monkeypatch, tmp_path):
     assert sleeps == []
 
 
+def test_enrich_skips_malformed_media_items(monkeypatch, tmp_path):
+    monkeypatch.setenv("SCHOLAR_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("NEWS_THUMB_FETCH_DELAY_SECONDS", "0.5")
+    sleeps: list[float] = []
+    monkeypatch.setattr(nt.time, "sleep", lambda s: sleeps.append(s))
+
+    items = [None, "not-a-dict", {"url": "", "title": "ok"}]
+
+    assert nt.enrich_filtered_media_thumbnails("ynWS968AAAAJ", items) == 0
+    assert sleeps == []
+
+
+def test_enrich_sleeps_after_item_exception(monkeypatch, tmp_path):
+    monkeypatch.setenv("SCHOLAR_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("NEWS_THUMB_FETCH_DELAY_SECONDS", "0.01")
+    sleeps: list[float] = []
+    monkeypatch.setattr(nt.time, "sleep", lambda s: sleeps.append(s))
+
+    def boom(_sid, _item):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(nt, "mirror_remote_item_image", boom)
+
+    items = [{"url": "https://example.com/one", "title": "t"}]
+    assert nt.enrich_filtered_media_thumbnails("ynWS968AAAAJ", items) == 0
+    assert sleeps == [0.01]
+
+
 def test_enrich_sleeps_after_html_fetch_attempt(monkeypatch, tmp_path):
     monkeypatch.setenv("SCHOLAR_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("NEWS_THUMB_FETCH_DELAY_SECONDS", "0.01")
