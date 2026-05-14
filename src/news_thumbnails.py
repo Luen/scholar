@@ -3,7 +3,8 @@ Download article cover images for news items missing thumbnails.
 
 Runs during ``main.py`` (cron). Stores files under
 ``{SCHOLAR_DATA_DIR}/news_thumbnails/<scholar_id>/`` and sets each item's
-``image.url`` to ``/scholar/<id>/news/thumbnail/<filename>`` for the API to serve.
+``image.url`` to a public URL (see ``PUBLIC_API_BASE_URL``) or root-relative
+``/scholar/<id>/news/thumbnail/<filename>`` for the API to serve.
 """
 
 from __future__ import annotations
@@ -64,6 +65,23 @@ def _thumb_delay_seconds() -> float:
 
 def scholar_data_dir() -> Path:
     return Path(os.environ.get("SCHOLAR_DATA_DIR", "scholar_data")).expanduser()
+
+
+def public_api_base_url() -> str:
+    """
+    When set (e.g. ``https://api.rummerlab.com``), thumbnail ``image.url`` in JSON is
+    absolute so consumers do not need to resolve paths. Empty → root-relative ``/scholar/...``.
+    """
+    return os.environ.get("PUBLIC_API_BASE_URL", "").strip().rstrip("/")
+
+
+def thumbnail_image_public_url(scholar_id: str, filename: str) -> str:
+    """Path served by Flask at ``GET /scholar/<id>/news/thumbnail/<filename>``."""
+    path = f"/scholar/{scholar_id}/news/thumbnail/{filename}"
+    base = public_api_base_url()
+    if base:
+        return f"{base}{path}"
+    return path
 
 
 def thumbnail_dir(scholar_id: str) -> Path:
@@ -191,7 +209,7 @@ def ensure_thumbnail_for_item(scholar_id: str, item: dict[str, Any]) -> bool:
     existing = _find_existing_thumbnail(tdir, digest)
     if existing is not None:
         item["image"] = {
-            "url": f"/scholar/{scholar_id}/news/thumbnail/{existing.name}",
+            "url": thumbnail_image_public_url(scholar_id, existing.name),
             "alt": strip_html((item.get("title") or "")[:500]),
         }
         return True
@@ -219,7 +237,7 @@ def ensure_thumbnail_for_item(scholar_id: str, item: dict[str, Any]) -> bool:
         return False
 
     item["image"] = {
-        "url": f"/scholar/{scholar_id}/news/thumbnail/{dest.name}",
+        "url": thumbnail_image_public_url(scholar_id, dest.name),
         "alt": strip_html((item.get("title") or "")[:500]),
     }
     return True

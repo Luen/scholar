@@ -8,6 +8,18 @@ def test_max_image_bytes_invalid_env_uses_default(monkeypatch):
     assert nt._max_image_bytes() == 2_500_000
 
 
+def test_thumbnail_image_public_url_with_base(monkeypatch):
+    monkeypatch.setenv("PUBLIC_API_BASE_URL", "https://api.rummerlab.com")
+    u = nt.thumbnail_image_public_url("ynWS968AAAAJ", "abc.jpg")
+    assert u == "https://api.rummerlab.com/scholar/ynWS968AAAAJ/news/thumbnail/abc.jpg"
+
+
+def test_thumbnail_image_public_url_strips_trailing_slash(monkeypatch):
+    monkeypatch.setenv("PUBLIC_API_BASE_URL", "https://api.rummerlab.com/")
+    u = nt.thumbnail_image_public_url("ynWS968AAAAJ", "a.webp")
+    assert u == "https://api.rummerlab.com/scholar/ynWS968AAAAJ/news/thumbnail/a.webp"
+
+
 def test_sniff_image_format():
     assert nt.sniff_image_format(b"\xff\xd8\xff" + b"\x00" * 20) == ("jpg", "image/jpeg")
     assert nt.sniff_image_format(b"\x89PNG\r\n\x1a\n" + b"\x00" * 20) == ("png", "image/png")
