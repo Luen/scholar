@@ -72,6 +72,8 @@ Build the base image first (web and cron use it; the base container exits immedi
 docker compose build base
 ```
 
+The **web** image installs Gunicorn again in its own layer and starts the app with `python -m gunicorn`, so the API starts even if `scholar-base:latest` was built earlier without Gunicorn (e.g. stale cache or compose building web before base finished).
+
 Then start all services (or build and start in one go):
 
 ```bash
