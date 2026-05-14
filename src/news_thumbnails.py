@@ -133,7 +133,7 @@ def managed_thumbnail_filename_from_url(scholar_id: str, url: str) -> str | None
     return rest
 
 
-def normalize_managed_thumbnail_public_urls(scholar_id: str, items: list[dict[str, Any]]) -> int:
+def normalize_managed_thumbnail_public_urls(scholar_id: str, items: list[Any]) -> int:
     """
     Rewrite proxied ``image.url`` values to match ``PUBLIC_API_BASE_URL`` (or root-relative).
 
@@ -141,6 +141,8 @@ def normalize_managed_thumbnail_public_urls(scholar_id: str, items: list[dict[st
     """
     changed = 0
     for item in items:
+        if not isinstance(item, dict):
+            continue
         img = item.get("image")
         if not isinstance(img, dict):
             continue
@@ -155,6 +157,13 @@ def normalize_managed_thumbnail_public_urls(scholar_id: str, items: list[dict[st
             img["url"] = new_u
             changed += 1
     return changed
+
+
+def _media_item_log_url(item: Any) -> str:
+    """Return a concise URL label for thumbnail warnings."""
+    if not isinstance(item, dict):
+        return "<malformed media item>"
+    return str(item.get("url") or "")[:120]
 
 
 def _image_url_is_served_by_us(url: str, scholar_id: str) -> bool:
@@ -338,7 +347,7 @@ def ensure_thumbnail_for_item(scholar_id: str, item: dict[str, Any]) -> tuple[bo
     return True, True
 
 
-def enrich_filtered_media_thumbnails(scholar_id: str, items: list[dict[str, Any]]) -> int:
+def enrich_filtered_media_thumbnails(scholar_id: str, items: list[Any]) -> int:
     """
     For each item: mirror remote ``image.url`` to disk (then serve via Flask), then
     fill missing images from article **og:image** when needed.
@@ -346,6 +355,9 @@ def enrich_filtered_media_thumbnails(scholar_id: str, items: list[dict[str, Any]
     updated = normalize_managed_thumbnail_public_urls(scholar_id, items)
     delay = _thumb_delay_seconds()
     for item in items:
+        if not isinstance(item, dict):
+            logger.debug("Skipping malformed media item during thumbnail enrichment: %r", item)
+            continue
         try:
             m_changed, m_throttle = mirror_remote_item_image(scholar_id, item)
             t_changed, t_throttle = ensure_thumbnail_for_item(scholar_id, item)
@@ -354,7 +366,9 @@ def enrich_filtered_media_thumbnails(scholar_id: str, items: list[dict[str, Any]
             if delay and (m_throttle or t_throttle):
                 time.sleep(delay)
         except Exception as e:
-            logger.warning("Thumbnail step failed for %s: %s", item.get("url"), e)
+            logger.warning("Thumbnail step failed for %s: %s", _media_item_log_url(item), e)
+            if delay:
+                time.sleep(delay)
     if updated:
         logger.info("News thumbnails: updated %d items for %s", updated, scholar_id)
     return updated
