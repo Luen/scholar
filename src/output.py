@@ -23,10 +23,11 @@ def load_author(path: str) -> dict[str, Any] | None:
         return None
 
 
-def save_author(author: dict[str, Any], path: str) -> None:
+def save_author(author: dict[str, Any], path: str, *, update_last_fetched: bool = True) -> None:
     """Save author data to JSON with schema_version and last_fetched."""
     author["schema_version"] = SCHEMA_VERSION
-    author["last_fetched"] = datetime.now().isoformat()
+    if update_last_fetched:
+        author["last_fetched"] = datetime.now().isoformat()
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(author, f, indent=4)

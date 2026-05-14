@@ -100,6 +100,38 @@ def _enrich_publication(
             bib["impact_factor"] = ""
 
 
+def _refresh_cached_news_artifacts(author: dict, scholar_id: str, output_path: str) -> bool:
+    """
+    Backfill derived news fields for fresh cached author JSON.
+
+    Fresh data can predate derived fields added by newer deployments. Updating these
+    fields should not move ``last_fetched`` forward because the scholar profile itself
+    was not re-fetched.
+    """
+    import logging
+
+    log = logging.getLogger(__name__)
+    changed = False
+
+    if not isinstance(author.get("media_filtered"), list):
+        raw_media = author.get("media", []) or []
+        if not isinstance(raw_media, list):
+            raw_media = []
+        log.info("Filtering cached media for API (writes media_filtered)")
+        author["media_filtered"] = filter_media_items(raw_media)
+        author["media_filtered_at"] = datetime.now(timezone.utc).isoformat()
+        changed = True
+
+    filtered_media = author.get("media_filtered")
+    if isinstance(filtered_media, list):
+        changed = enrich_filtered_media_thumbnails(scholar_id, filtered_media) > 0 or changed
+
+    if changed:
+        save_author(author, output_path, update_last_fetched=False)
+        log.info("Cached news artifacts updated in %s", output_path)
+    return changed
+
+
 def run(scholar_id: str, config: Config | None = None) -> int:
     """Run the full scholar fetch pipeline. Returns exit code."""
     import logging
@@ -116,6 +148,7 @@ def run(scholar_id: str, config: Config | None = None) -> int:
         log.info("Loaded previous data for %s", scholar_id)
 
     if is_fresh(previous.get("last_fetched") if previous else None, config.fresh_data_seconds):
+        _refresh_cached_news_artifacts(previous, config.scholar_id, config.output_path)
         log.info(
             "Data is fresh (within %ds). Skipping fetch.",
             config.fresh_data_seconds,

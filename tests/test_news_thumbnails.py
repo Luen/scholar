@@ -56,6 +56,32 @@ def test_ensure_thumbnail_reuses_existing_file(monkeypatch, tmp_path):
     assert item["image"]["alt"] == "Hello World"
 
 
+def test_ensure_thumbnail_updates_managed_url_to_public_base(monkeypatch):
+    monkeypatch.setenv("PUBLIC_API_BASE_URL", "https://api.rummerlab.com")
+    sid = "ynWS968AAAAJ"
+    digest = nt.url_hash("https://example.com/article")
+    name = f"{digest}.jpg"
+    item = {
+        "title": "Managed thumbnail",
+        "image": {"url": f"/scholar/{sid}/news/thumbnail/{name}"},
+    }
+
+    assert nt.ensure_thumbnail_for_item(sid, item) is True
+    assert item["image"]["url"] == f"https://api.rummerlab.com/scholar/{sid}/news/thumbnail/{name}"
+    assert item["image"]["alt"] == "Managed thumbnail"
+
+
+def test_ensure_thumbnail_keeps_third_party_image(monkeypatch):
+    monkeypatch.setenv("PUBLIC_API_BASE_URL", "https://api.rummerlab.com")
+    item = {
+        "title": "External image",
+        "image": {"url": "https://cdn.example/image.jpg"},
+    }
+
+    assert nt.ensure_thumbnail_for_item("ynWS968AAAAJ", item) is False
+    assert item["image"]["url"] == "https://cdn.example/image.jpg"
+
+
 def test_ensure_thumbnail_downloads_and_writes(monkeypatch, tmp_path):
     monkeypatch.setenv("SCHOLAR_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("NEWS_THUMB_FETCH_DELAY_SECONDS", "0")

@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,7 @@ IMAGE_HEADERS = {
 
 _MAX_HTML_BYTES = 600_000
 _MAX_IMAGE_BYTES_DEFAULT = 2_500_000
+_THUMBNAIL_FILENAME_RE = re.compile(r"^[a-f0-9]{64}\.(?:jpe?g|png|gif|webp)$", re.IGNORECASE)
 
 
 def _max_image_bytes() -> int:
@@ -185,12 +187,50 @@ def _download_image_bytes(image_url: str, *, timeout_s: int = 25) -> bytes | Non
         return None
 
 
-def _media_item_has_usable_image(item: dict[str, Any]) -> bool:
+def _media_item_image_url(item: dict[str, Any]) -> str:
     img = item.get("image")
     if not isinstance(img, dict):
-        return False
+        return ""
     u = (img.get("url") or "").strip()
-    return bool(u)
+    return u
+
+
+def _managed_thumbnail_filename(scholar_id: str, image_url: str) -> str | None:
+    """Return the managed thumbnail filename when ``image_url`` points at our API route."""
+    if not image_url:
+        return None
+    path = urlparse(image_url).path
+    prefix = f"/scholar/{scholar_id}/news/thumbnail/"
+    if not path.startswith(prefix):
+        return None
+    filename = path[len(prefix) :]
+    if "/" in filename or not _THUMBNAIL_FILENAME_RE.match(filename):
+        return None
+    return filename
+
+
+def _thumbnail_alt_text(item: dict[str, Any]) -> str:
+    return strip_html((item.get("title") or "")[:500])
+
+
+def _set_managed_thumbnail_image(scholar_id: str, filename: str, item: dict[str, Any]) -> bool:
+    """Set the item image to the configured API URL. Returns True if data changed."""
+    current = item.get("image")
+    image = dict(current) if isinstance(current, dict) else {}
+    before = dict(image)
+    image["url"] = thumbnail_image_public_url(scholar_id, filename)
+    alt = image.get("alt")
+    if not isinstance(alt, str) or not alt.strip():
+        image["alt"] = _thumbnail_alt_text(item)
+    item["image"] = image
+    return image != before
+
+
+def _sync_existing_managed_thumbnail_url(scholar_id: str, item: dict[str, Any]) -> bool:
+    filename = _managed_thumbnail_filename(scholar_id, _media_item_image_url(item))
+    if not filename:
+        return False
+    return _set_managed_thumbnail_image(scholar_id, filename, item)
 
 
 def ensure_thumbnail_for_item(scholar_id: str, item: dict[str, Any]) -> bool:
@@ -198,7 +238,9 @@ def ensure_thumbnail_for_item(scholar_id: str, item: dict[str, Any]) -> bool:
     If item has an absolute article URL but no image, try og:image (etc.), download,
     and set ``image`` to a local API path. Returns True if ``image`` was set/updated.
     """
-    if _media_item_has_usable_image(item):
+    if _sync_existing_managed_thumbnail_url(scholar_id, item):
+        return True
+    if _media_item_image_url(item):
         return False
     page_url = (item.get("url") or "").strip()
     if not page_url.startswith(("http://", "https://")):
@@ -208,11 +250,7 @@ def ensure_thumbnail_for_item(scholar_id: str, item: dict[str, Any]) -> bool:
     digest = url_hash(page_url)
     existing = _find_existing_thumbnail(tdir, digest)
     if existing is not None:
-        item["image"] = {
-            "url": thumbnail_image_public_url(scholar_id, existing.name),
-            "alt": strip_html((item.get("title") or "")[:500]),
-        }
-        return True
+        return _set_managed_thumbnail_image(scholar_id, existing.name, item)
 
     html = _fetch_html_page(page_url)
     if not html:
@@ -236,11 +274,7 @@ def ensure_thumbnail_for_item(scholar_id: str, item: dict[str, Any]) -> bool:
         logger.warning("Could not write thumbnail %s: %s", dest, e)
         return False
 
-    item["image"] = {
-        "url": thumbnail_image_public_url(scholar_id, dest.name),
-        "alt": strip_html((item.get("title") or "")[:500]),
-    }
-    return True
+    return _set_managed_thumbnail_image(scholar_id, dest.name, item)
 
 
 def enrich_filtered_media_thumbnails(scholar_id: str, items: list[dict[str, Any]]) -> int:
