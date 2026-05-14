@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 from src import scholar_citations as sc
 from src.doi_utils import normalize_doi
@@ -135,3 +136,51 @@ def test_list_cached_successful_dois_accepts_legacy_special_character_filename(
     )
 
     assert sc.list_cached_successful_dois() == {normalize_doi(doi)}
+
+
+def test_scholar_empty_proxy_chain_logs_warning(monkeypatch, caplog):
+    monkeypatch.setattr(sc, "get_request_proxy_chain", lambda: [])
+    monkeypatch.setattr(sc, "get_request_proxy_chain_summary", lambda: "none")
+
+    result = sc._scholar_search_with_proxy_retries("10.1000/example", {})
+
+    assert result is None
+    assert "proxy chain is empty" in caplog.text
+
+
+def test_scholar_request_exception_preserves_previous_success(monkeypatch, tmp_path):
+    monkeypatch.setattr(sc, "CACHE_DIR", str(tmp_path))
+    doi = "10.1000/example"
+    sc._write_cache(
+        doi,
+        "scholar",
+        {"found": True, "citations": 7, "last_fetched_result": sc.FETCH_RESULT_SUCCESS},
+    )
+    previous_cache, _ = sc._read_cache(doi, "scholar")
+    assert previous_cache is not None
+    previous_successful_fetch = previous_cache["last_successful_fetch"]
+
+    monkeypatch.setattr(
+        sc,
+        "get_crossref_metadata_cached",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            authors=["Allowed Rummer"],
+            author_families=["Rummer"],
+            title="Example title",
+        ),
+    )
+
+    def raise_request_exception(*_args, **_kwargs):
+        raise sc.requests.RequestException("network down")
+
+    monkeypatch.setattr(sc, "_scholar_search_with_proxy_retries", raise_request_exception)
+
+    result = sc.fetch_google_scholar_citations(doi, force_refresh=True)
+    cached, _ = sc._read_cache(doi, "scholar")
+
+    assert result.citations == 7
+    assert result.last_successful_fetch == previous_successful_fetch
+    assert result.last_fetched_result == sc.FETCH_RESULT_ERROR
+    assert cached is not None
+    assert cached["citations"] == 7
+    assert cached["last_successful_fetch"] == previous_successful_fetch

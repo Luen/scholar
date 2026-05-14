@@ -450,6 +450,9 @@ def _scholar_search_with_proxy_retries(query: str, headers: dict) -> tuple[int |
     proxies_list = get_request_proxy_chain()
     chain_summary = get_request_proxy_chain_summary()
     logger.info("Scholar proxy chain: %s (%d attempts)", chain_summary, len(proxies_list))
+    if not proxies_list:
+        logger.warning("Scholar proxy chain is empty; cannot query Google Scholar for %.60s", query)
+        return None
 
     last_e: requests.RequestException | None = None
     got_http_response = False  # True if any attempt got HTTP (even blocked/non-200)
@@ -516,8 +519,9 @@ def _is_blocked_response(html: str, url: str) -> bool:
 
 def _last_fetch_from_cache(cached: dict, doi: str, prefix: str) -> str | None:
     """Last fetch timestamp from cache: use fetched_at if present, else file mtime."""
-    if cached.get("fetched_at"):
-        return cached["fetched_at"]
+    fetched_at = cached.get("fetched_at")
+    if isinstance(fetched_at, str) and fetched_at:
+        return fetched_at
     p = _doi_metrics_cache_file(doi, prefix)
     if p is None:
         return None
@@ -864,12 +868,20 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
         now_iso = datetime.now().isoformat()
         warning = "Google Scholar request failed (network or proxy error)"
         prev_cached, _ = _read_cache(doi, "scholar")
+        previous_citations = (
+            prev_cached.get("citations")
+            if prev_cached is not None and prev_cached.get("found", True)
+            else None
+        )
+        previous_successful_fetch = (
+            prev_cached.get("last_successful_fetch") if prev_cached is not None else None
+        )
         _write_cache(
             doi,
             "scholar",
             {
                 "found": True,
-                "citations": None,
+                "citations": previous_citations,
                 "warning": warning,
                 "last_fetched_result": FETCH_RESULT_ERROR,
             },
@@ -878,9 +890,10 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
         )
         return ScholarCitationsResult(
             doi=doi,
-            citations=None,
+            citations=previous_citations,
             found=True,
             last_fetch=now_iso,
+            last_successful_fetch=previous_successful_fetch,
             last_fetched_result=FETCH_RESULT_ERROR,
             warning=warning,
         )
