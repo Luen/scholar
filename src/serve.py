@@ -88,6 +88,9 @@ def _served_media_items(author: dict, scholar_id: str | None = None) -> list[dic
     precooked = author.get("media_filtered")
     if isinstance(precooked, list):
         return precooked
+    raw_media = author.get("media")
+    if not isinstance(raw_media, list) or not raw_media:
+        return []
     if scholar_id and scholar_id not in _legacy_news_filter_warned:
         _legacy_news_filter_warned.add(scholar_id)
         logger.warning(
@@ -97,7 +100,7 @@ def _served_media_items(author: dict, scholar_id: str | None = None) -> list[dic
             scholar_id,
             scholar_id,
         )
-    return filter_media_items(author.get("media", []) or [])
+    return filter_media_items(raw_media)
 
 
 def _drop_news_fields(data: dict) -> None:
