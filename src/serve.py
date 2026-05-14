@@ -5,6 +5,7 @@ import os
 import re
 from datetime import datetime
 from email.utils import formatdate
+from pathlib import Path
 
 from flask import Flask, jsonify, make_response, request, send_file, send_from_directory
 
@@ -44,15 +45,13 @@ def _scholar_file_path(scholar_id: str) -> str | None:
     """Return safe path to scholar JSON file, or None if invalid."""
     if len(scholar_id) != 12 or not re.match(r"^[a-zA-Z0-9_-]+$", scholar_id):
         return None
-    path = os.path.join(SCHOLAR_DATA_DIR_ABS, f"{scholar_id}.json")
-    # Ensure path stays inside SCHOLAR_DATA_DIR (path traversal safety)
     try:
-        real_path = os.path.realpath(path)
-        if os.path.commonpath([real_path, SCHOLAR_DATA_DIR_ABS]) != SCHOLAR_DATA_DIR_ABS:
-            return None
+        base = Path(SCHOLAR_DATA_DIR_ABS).resolve()
+        candidate = (base / f"{scholar_id}.json").resolve()
+        candidate.relative_to(base)
     except (ValueError, OSError):
         return None
-    return real_path
+    return str(candidate)
 
 
 def _load_scholar_data_or_error(scholar_id: str):
@@ -66,7 +65,7 @@ def _load_scholar_data_or_error(scholar_id: str):
     if not filepath:
         return None, ({"error": "Invalid id"}, 400)
     try:
-        with open(filepath, encoding="utf-8") as f:
+        with Path(filepath).open(encoding="utf-8") as f:
             data = json.load(f)
         return data, None
     except FileNotFoundError:
@@ -223,20 +222,19 @@ def get_news_thumbnail(id, filename):
         return jsonify({"error": "Invalid id"}), 400
     if not _THUMB_NAME_RE.match(filename):
         return jsonify({"error": "Invalid filename"}), 400
-    thumb_root = os.path.join(SCHOLAR_DATA_DIR_ABS, "news_thumbnails", id)
-    path = os.path.join(thumb_root, filename)
     try:
-        real_path = os.path.realpath(path)
-        real_root = os.path.realpath(thumb_root)
-        if os.path.commonpath([real_path, real_root]) != real_root:
-            return jsonify({"error": "Not found"}), 404
+        base = Path(SCHOLAR_DATA_DIR_ABS).resolve()
+        thumb_root = (base / "news_thumbnails" / id).resolve()
+        thumb_root.relative_to(base)
+        real_path = (thumb_root / filename).resolve()
+        real_path.relative_to(thumb_root)
     except (ValueError, OSError):
         return jsonify({"error": "Not found"}), 404
-    if not os.path.isfile(real_path):
+    if not real_path.is_file():
         return "", 404
-    ext = os.path.splitext(filename)[1].lower()
+    ext = real_path.suffix.lower()
     mimetype = _THUMB_MIMETYPE.get(ext, "application/octet-stream")
-    return send_file(real_path, mimetype=mimetype, max_age=86400 * 30)
+    return send_file(str(real_path), mimetype=mimetype, max_age=86400 * 30)
 
 
 @app.route("/scholar/<id>/gscholar", methods=["GET"])

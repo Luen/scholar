@@ -12,6 +12,7 @@ import os
 import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 from urllib.parse import quote
 
 import requests
@@ -85,6 +86,20 @@ if not CACHE_DIR:
     CACHE_DIR = os.path.join(base, "doi_metrics")
 
 
+def _doi_metrics_cache_root() -> Path:
+    return Path(CACHE_DIR).resolve()
+
+
+def _resolved_path_under_doi_metrics_cache(path: str) -> Path | None:
+    """Return ``path`` resolved only if it lies under the DOI metrics cache directory."""
+    try:
+        p = Path(path).resolve()
+        p.relative_to(_doi_metrics_cache_root())
+        return p
+    except (ValueError, OSError):
+        return None
+
+
 def _normalize_doi_for_cache(doi: str) -> str:
     """Safe filename from DOI. Expects already-normalized DOI."""
     return doi.replace("/", "_").replace(":", "_").strip()
@@ -114,10 +129,11 @@ def _cache_path(doi: str, prefix: str) -> str:
 
 def _read_cache(path: str) -> tuple[dict | None, bool]:
     """Return (cached_value, is_expired). Cached value has 'value' and 'expires_at'."""
-    if not os.path.isfile(path):
+    p = _resolved_path_under_doi_metrics_cache(path)
+    if p is None or not p.is_file():
         return None, True
     try:
-        with open(path, encoding="utf-8") as f:
+        with p.open(encoding="utf-8") as f:
             data = json.load(f)
         expires = data.get("expires_at")
         if not expires:
@@ -140,8 +156,11 @@ def list_cached_successful_dois() -> set[str]:
             if not name.startswith(prefix) or not name.endswith(".json"):
                 continue
             path = os.path.join(CACHE_DIR, name)
+            p = _resolved_path_under_doi_metrics_cache(path)
+            if p is None:
+                continue
             try:
-                with open(path, encoding="utf-8") as f:
+                with p.open(encoding="utf-8") as f:
                     data = json.load(f)
                 if data.get("found") and data.get("doi") and not data.get("warning"):
                     dois.add(normalize_doi(data["doi"]))
@@ -177,8 +196,11 @@ def list_cached_dois_with_warning() -> set[str]:
             if not name.startswith(prefix) or not name.endswith(".json"):
                 continue
             path = os.path.join(CACHE_DIR, name)
+            p = _resolved_path_under_doi_metrics_cache(path)
+            if p is None:
+                continue
             try:
-                with open(path, encoding="utf-8") as f:
+                with p.open(encoding="utf-8") as f:
                     data = json.load(f)
                 if data.get("warning") and data.get("doi"):
                     dois.add(normalize_doi(data["doi"]))
@@ -196,10 +218,11 @@ def touch_scholar_cache(doi: str) -> bool:
     """
     doi = normalize_doi(doi)
     path = _cache_path(doi, "scholar")
-    if not os.path.isfile(path):
+    p = _resolved_path_under_doi_metrics_cache(path)
+    if p is None or not p.is_file():
         return False
     try:
-        with open(path, encoding="utf-8") as f:
+        with p.open(encoding="utf-8") as f:
             data = json.load(f)
     except (json.JSONDecodeError, OSError):
         return False
@@ -208,7 +231,7 @@ def touch_scholar_cache(doi: str) -> bool:
     data["fetched_at"] = now.isoformat()
     data["expires_at"] = (now + timedelta(seconds=ttl)).isoformat()
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        with p.open("w", encoding="utf-8") as f:
             json.dump(data, f)
     except OSError:
         return False
@@ -226,8 +249,11 @@ def list_cached_successful_dois_older_than(seconds: int) -> set[str]:
             if not name.startswith(prefix) or not name.endswith(".json"):
                 continue
             path = os.path.join(CACHE_DIR, name)
+            p = _resolved_path_under_doi_metrics_cache(path)
+            if p is None:
+                continue
             try:
-                with open(path, encoding="utf-8") as f:
+                with p.open(encoding="utf-8") as f:
                     data = json.load(f)
                 if not data.get("found") or not data.get("doi") or data.get("warning"):
                     continue
@@ -269,8 +295,12 @@ def _write_cache(
         prev = previous_cached.get("last_successful_fetch")
         if prev:
             data["last_successful_fetch"] = prev
+    p = _resolved_path_under_doi_metrics_cache(path)
+    if p is None:
+        logger.warning("Refusing to write cache outside cache directory (%s)", path)
+        return
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        with p.open("w", encoding="utf-8") as f:
             json.dump(data, f)
     except OSError as e:
         logger.warning("Failed to write DOI metrics cache: %s", e)
@@ -408,8 +438,11 @@ def _last_fetch_from_cache(cached: dict, path: str) -> str | None:
     """Last fetch timestamp from cache: use fetched_at if present, else file mtime."""
     if cached.get("fetched_at"):
         return cached["fetched_at"]
+    p = _resolved_path_under_doi_metrics_cache(path)
+    if p is None:
+        return None
     try:
-        return datetime.fromtimestamp(os.path.getmtime(path)).isoformat()
+        return datetime.fromtimestamp(p.stat().st_mtime).isoformat()
     except OSError:
         return None
 

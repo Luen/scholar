@@ -1,5 +1,7 @@
 """Tests for news thumbnail download and JSON enrichment."""
 
+from urllib.parse import urlparse
+
 from src import news_thumbnails as nt
 
 
@@ -145,7 +147,9 @@ def test_mirror_remote_downloads_and_rewrites_url(monkeypatch, tmp_path):
     monkeypatch.setattr(
         nt,
         "_download_image_bytes",
-        lambda u, timeout_s=25: jpeg if "ytimg.com" in u else None,
+        lambda u, timeout_s=25: (
+            jpeg if (urlparse(u).hostname or "").endswith("ytimg.com") else None
+        ),
     )
     item = {"url": "https://youtube.com/x", "image": {"url": img_url, "alt": "Keep"}}
     assert nt.mirror_remote_item_image(sid, item) == (True, True)

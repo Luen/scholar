@@ -258,13 +258,15 @@ def strip_html(html: str) -> str:
     """Remove HTML tags and entities from text."""
     if not html:
         return ""
-    # Remove script and style blocks
-    html = re.sub(
-        r"<script\b[^<]*(?:(?!</script>)<[^<]*)*</script>", "", html, flags=re.I | re.DOTALL
-    )
-    html = re.sub(r"<style\b[^<]*(?:(?!</style>)<[^<]*)*</style>", "", html, flags=re.I | re.DOTALL)
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup(["script", "style"]):
+            tag.decompose()
+        text = soup.get_text(separator=" ")
+    except Exception:
+        text = html
     # Remove remaining HTML tags
-    text = re.sub(r"<[^>]+>", "", html)
+    text = re.sub(r"<[^>]+>", "", text)
     # Remove HTML entities
     text = re.sub(r"&[^;]+;", "", text)
     # Remove extra whitespace
@@ -470,7 +472,7 @@ def get_cache_key(url: str, params: dict | None = None) -> str:
     key = url
     if params:
         key += json.dumps(params, sort_keys=True)
-    return hashlib.md5(key.encode()).hexdigest()
+    return hashlib.sha256(key.encode()).hexdigest()
 
 
 def get_cached_response(cache_key: str) -> dict[str, Any] | None:

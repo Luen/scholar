@@ -1,5 +1,7 @@
 """Tests for DOI extraction and resolution."""
 
+from urllib.parse import urlparse
+
 import pytest
 
 from src.doi import (
@@ -32,11 +34,13 @@ def test_get_doi_link_and_short():
     doi = "10.1038/nclimate2195"
     link = get_doi_link(doi)
     assert link is not None
-    assert "doi.org" in link
+    host = urlparse(link).hostname or ""
+    assert host == "doi.org" or host.endswith(".doi.org")
     assert doi in link
 
     short_doi = get_doi_short(doi)
     if short_doi:
         short_link = get_doi_short_link(short_doi)
         assert short_link is not None
-        assert "doi.org" in short_link
+        short_host = urlparse(short_link).hostname or ""
+        assert short_host == "doi.org" or short_host.endswith(".doi.org")
