@@ -28,9 +28,17 @@ def test_news_filters_exclude_404_and_irrelevant(monkeypatch, tmp_path):
 
     scholar_id = "ynWS968AAAAJ"
     media = [
-        {"title": "keep strong marker", "url": "https://example.test/ok"},
+        {
+            "title": "Field season wrap-up",
+            "description": "Updates from RummerLab and Physioshark in Moorea.",
+            "url": "https://example.test/ok",
+        },
         {"title": "drop 404", "url": "https://example.test/missing"},
-        {"title": "drop irrelevant", "url": "https://example.test/irrelevant"},
+        {
+            "title": "Unrelated",
+            "description": "No marine biology or Rummer content here.",
+            "url": "https://example.test/irrelevant",
+        },
         {"title": "keep no url", "url": ""},
     ]
     _write_scholar(tmp_path, scholar_id, media)
@@ -65,10 +73,10 @@ def test_news_filters_exclude_404_and_irrelevant(monkeypatch, tmp_path):
     res = c.get(f"/scholar/{scholar_id}/news?limit=50")
     assert res.status_code == 200
     titles = [x.get("title") for x in res.json["media"]]
-    assert "keep strong marker" in titles
+    assert "Field season wrap-up" in titles
     assert "keep no url" in titles
     assert "drop 404" not in titles
-    assert "drop irrelevant" not in titles
+    assert "Unrelated" not in titles
 
 
 def test_news_filters_keep_on_network_errors(monkeypatch, tmp_path):
@@ -78,7 +86,13 @@ def test_news_filters_keep_on_network_errors(monkeypatch, tmp_path):
     news_filters.clear_caches()
 
     scholar_id = "ynWS968AAAAJ"
-    media = [{"title": "keep on error", "url": "https://example.test/flaky"}]
+    media = [
+        {
+            "title": "Climate and baby sharks",
+            "description": "Comments from Associate Professor Jodie Rummer at JCU.",
+            "url": "https://example.test/flaky",
+        }
+    ]
     _write_scholar(tmp_path, scholar_id, media)
 
     def fake_head(url, *args, **kwargs):
@@ -97,7 +111,44 @@ def test_news_filters_keep_on_network_errors(monkeypatch, tmp_path):
     res = c.get(f"/scholar/{scholar_id}/news?limit=50")
     assert res.status_code == 200
     titles = [x.get("title") for x in res.json["media"]]
-    assert titles == ["keep on error"]
+    assert titles == ["Climate and baby sharks"]
+
+
+def test_news_filters_drop_google_search_without_rummer_in_snippet(monkeypatch, tmp_path):
+    """Google Search rows with only generic JCU/marine text must not hit Scrapling."""
+    from src import news_filters, serve
+
+    serve.SCHOLAR_DATA_DIR_ABS = str(tmp_path)
+    news_filters.clear_caches()
+
+    scholar_id = "ynWS968AAAAJ"
+    media = [
+        {
+            "source": "Google Search",
+            "title": "Jacinta Jefferies | LinkedIn",
+            "description": "Marine Scientist | Master of Marine Biology JCU Graduate",
+            "url": "https://example.test/linkedin-jacinta",
+        }
+    ]
+    _write_scholar(tmp_path, scholar_id, media)
+
+    scrapling_calls: list[str] = []
+
+    def fake_head(url, *args, **kwargs):
+        return _FakeResp(status_code=200)
+
+    def fake_scrapling_fetch(url: str, *, timeout_s: int = 8):
+        scrapling_calls.append(url)
+        return 200, "text/html; charset=utf-8", "<html><body>rummerlab</body></html>".lower()
+
+    monkeypatch.setattr(news_filters.requests, "head", fake_head)
+    monkeypatch.setattr(news_filters, "_scrapling_fetch_html_prefix", fake_scrapling_fetch)
+
+    c = serve.app.test_client()
+    res = c.get(f"/scholar/{scholar_id}/news?limit=50")
+    assert res.status_code == 200
+    assert res.json["media"] == []
+    assert scrapling_calls == []
 
 
 def test_parts_news_is_rejected(monkeypatch, tmp_path):

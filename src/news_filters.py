@@ -63,6 +63,9 @@ def _news_html_cache_max_age_seconds() -> int | None:
 
 NEWS_HTML_CACHE_MAX_AGE_SECONDS = _news_html_cache_max_age_seconds()
 
+# Sources where title/snippet often drift from the real page (Custom Search, GNews).
+SNIPPET_FILTER_SOURCES = frozenset({"Google Search", "GNews"})
+
 
 def _url_cache_key(url: str) -> str:
     return sha256(url.encode("utf-8")).hexdigest()
@@ -203,10 +206,14 @@ def url_page_is_about_rummer(url: str) -> bool | None:
     """
     Best-effort content check.
 
+    Disk cache (under ``CACHE_DIR/news_html/``): on a **successful HTTP response**
+    (2xx), HTML text (lowercased prefix used for matching) is saved so the same URL
+    is not re-fetched until ``NEWS_HTML_CACHE_EXPIRE_SECONDS`` (default one year).
+
     Returns:
     - True: confident the page mentions Dr Jodie Rummer / lab terms
     - False: confident it does NOT (based on fetched content)
-    - None: unknown (blocked, paywall, non-HTML, network error) -> do not exclude
+    - None: unknown (blocked, paywall, non-HTML, non-2xx, network error) -> do not exclude
     """
     cached_html = _load_cached_html(url)
     if cached_html:
@@ -226,6 +233,9 @@ def url_page_is_about_rummer(url: str) -> bool | None:
         status_code, ctype, text = fetched
         if status_code == 404:
             # Let the 404 filter handle it; treat as unknown here.
+            return None
+        # Only persist HTML for successful responses (avoid caching error/bot pages as "evidence").
+        if not (200 <= status_code < 300):
             return None
         if ctype and ("text/html" not in ctype and "application/xhtml+xml" not in ctype):
             return None
@@ -256,11 +266,16 @@ def url_page_is_about_rummer(url: str) -> bool | None:
 def filter_media_items(items: list[dict]) -> list[dict]:
     """
     Filter media items:
+    - for noisy sources (Google Custom Search, GNews), drop items whose
+      title/description/content clearly fail Dr Jodie Rummer relevance
     - drop items with absolute URL that is definitively 404
     - drop items with absolute URL that we confidently conclude are not about Rummer
     - keep on unknown (errors, blocked, non-HTML) to avoid false negatives
     - keep items without an absolute URL
     """
+    # Local import: news_scraper pulls optional deps; only needed when filtering URLs.
+    from src.news_scraper import does_article_mention_rummer
+
     filtered: list[dict] = []
     for item in items:
         url = (item.get("url") or "").strip() if isinstance(item, dict) else ""
@@ -268,6 +283,18 @@ def filter_media_items(items: list[dict]) -> list[dict]:
         if not url or not (url.startswith("http://") or url.startswith("https://")):
             filtered.append(item)
             continue
+
+        title = (item.get("title") or "").strip()
+        description = (item.get("description") or "").strip()
+        content = (item.get("content") or item.get("body") or "").strip()
+        source = (item.get("source") or "").strip()
+        if (
+            source in SNIPPET_FILTER_SOURCES
+            and (title or description or content)
+            and not does_article_mention_rummer(content, title, description)
+        ):
+            continue
+
         if url_is_definitely_404(url):
             continue
         about = url_page_is_about_rummer(url)
