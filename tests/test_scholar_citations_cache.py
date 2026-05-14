@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 from src import scholar_citations as sc
 from src.doi_utils import normalize_doi
@@ -72,6 +73,43 @@ def test_read_cache_treats_non_object_json_as_miss(monkeypatch, tmp_path):
     assert expired is True
 
 
+def test_read_cache_treats_non_string_expiry_as_miss(monkeypatch, tmp_path):
+    monkeypatch.setattr(sc, "CACHE_DIR", str(tmp_path))
+    doi = "10.1002/(sici)1099-0844"
+    cache_path = sc._doi_metrics_cache_file(doi, "scholar")
+    assert cache_path is not None
+    cache_path.write_text(
+        json.dumps({"doi": doi, "found": True, "expires_at": True}),
+        encoding="utf-8",
+    )
+
+    cached, expired = sc._read_cache(doi, "scholar")
+
+    assert cached is None
+    assert expired is True
+
+
+def test_cache_listing_helpers_ignore_non_string_doi(monkeypatch, tmp_path):
+    monkeypatch.setattr(sc, "CACHE_DIR", str(tmp_path))
+    old_timestamp = (datetime.now() - timedelta(days=8)).isoformat()
+    for name in ("scholar_bad.json", "altmetric_bad.json"):
+        (tmp_path / name).write_text(
+            json.dumps(
+                {
+                    "doi": 123,
+                    "found": True,
+                    "fetched_at": old_timestamp,
+                    "warning": "blocked",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    assert sc.list_cached_successful_dois() == set()
+    assert sc.list_cached_dois_with_warning() == set()
+    assert sc.list_cached_successful_dois_older_than(7 * 24 * 60 * 60) == set()
+
+
 def test_list_cached_successful_dois_accepts_legacy_special_character_filename(
     monkeypatch, tmp_path
 ):
@@ -91,3 +129,51 @@ def test_list_cached_successful_dois_accepts_legacy_special_character_filename(
     )
 
     assert sc.list_cached_successful_dois() == {normalize_doi(doi)}
+
+
+def test_scholar_empty_proxy_chain_logs_warning(monkeypatch, caplog):
+    monkeypatch.setattr(sc, "get_request_proxy_chain", lambda: [])
+    monkeypatch.setattr(sc, "get_request_proxy_chain_summary", lambda: "none")
+
+    result = sc._scholar_search_with_proxy_retries("10.1000/example", {})
+
+    assert result is None
+    assert "proxy chain is empty" in caplog.text
+
+
+def test_scholar_request_exception_preserves_previous_success(monkeypatch, tmp_path):
+    monkeypatch.setattr(sc, "CACHE_DIR", str(tmp_path))
+    doi = "10.1000/example"
+    sc._write_cache(
+        doi,
+        "scholar",
+        {"found": True, "citations": 7, "last_fetched_result": sc.FETCH_RESULT_SUCCESS},
+    )
+    previous_cache, _ = sc._read_cache(doi, "scholar")
+    assert previous_cache is not None
+    previous_successful_fetch = previous_cache["last_successful_fetch"]
+
+    monkeypatch.setattr(
+        sc,
+        "get_crossref_metadata_cached",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            authors=["Allowed Rummer"],
+            author_families=["Rummer"],
+            title="Example title",
+        ),
+    )
+
+    def raise_request_exception(*_args, **_kwargs):
+        raise sc.requests.RequestException("network down")
+
+    monkeypatch.setattr(sc, "_scholar_search_with_proxy_retries", raise_request_exception)
+
+    result = sc.fetch_google_scholar_citations(doi, force_refresh=True)
+    cached, _ = sc._read_cache(doi, "scholar")
+
+    assert result.citations == 7
+    assert result.last_successful_fetch == previous_successful_fetch
+    assert result.last_fetched_result == sc.FETCH_RESULT_ERROR
+    assert cached is not None
+    assert cached["citations"] == 7
+    assert cached["last_successful_fetch"] == previous_successful_fetch

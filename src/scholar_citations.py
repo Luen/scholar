@@ -151,6 +151,14 @@ def _read_cache_json_object(path: Path) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
+def _normalize_cached_doi(value: object) -> str | None:
+    """Normalize a cached DOI field only when it is a non-empty string."""
+    if not isinstance(value, str):
+        return None
+    doi = normalize_doi(value)
+    return doi if doi else None
+
+
 def _doi_from_cache_filename(name: str, expected_prefix: str) -> str | None:
     """Best-effort DOI recovery from cache filename for legacy or invalid JSON cache entries."""
     match = _CACHE_JSON_BASENAME_RE.match(name)
@@ -165,9 +173,9 @@ def _doi_from_cache_file_or_name(path: Path, name: str, expected_prefix: str) ->
     """Read DOI from cache JSON, falling back to the legacy filename encoding."""
     data = _read_cache_json_object(path)
     if data is not None:
-        doi = data.get("doi")
-        if isinstance(doi, str) and doi.strip():
-            return normalize_doi(doi)
+        doi = _normalize_cached_doi(data.get("doi"))
+        if doi:
+            return doi
     return _doi_from_cache_filename(name, expected_prefix)
 
 
@@ -197,7 +205,7 @@ def _read_cache(doi: str, prefix: str) -> tuple[dict | None, bool]:
         if data is None:
             return None, True
         expires = data.get("expires_at")
-        if not expires:
+        if not isinstance(expires, str) or not expires:
             return None, True
         exp_dt = datetime.fromisoformat(expires)
         if datetime.now() > exp_dt:
@@ -222,8 +230,9 @@ def list_cached_successful_dois() -> set[str]:
             data = _read_cache_json_object(p)
             if data is None:
                 continue
-            if data.get("found") and data.get("doi") and not data.get("warning"):
-                dois.add(normalize_doi(data["doi"]))
+            doi = _normalize_cached_doi(data.get("doi"))
+            if data.get("found") and doi and not data.get("warning"):
+                dois.add(doi)
     return dois
 
 
@@ -260,8 +269,9 @@ def list_cached_dois_with_warning() -> set[str]:
             data = _read_cache_json_object(p)
             if data is None:
                 continue
-            if data.get("warning") and data.get("doi"):
-                dois.add(normalize_doi(data["doi"]))
+            doi = _normalize_cached_doi(data.get("doi"))
+            if data.get("warning") and doi:
+                dois.add(doi)
     return dois
 
 
@@ -308,15 +318,16 @@ def list_cached_successful_dois_older_than(seconds: int) -> set[str]:
                 data = _read_cache_json_object(p)
                 if data is None:
                     continue
-                if not data.get("found") or not data.get("doi") or data.get("warning"):
+                doi = _normalize_cached_doi(data.get("doi"))
+                if not data.get("found") or not doi or data.get("warning"):
                     continue
                 fetched_at = data.get("fetched_at")
-                if not fetched_at:
+                if not isinstance(fetched_at, str) or not fetched_at:
                     continue
                 fetched_dt = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
                 age_seconds = now.timestamp() - fetched_dt.timestamp()
                 if age_seconds >= seconds:
-                    dois.add(normalize_doi(data["doi"]))
+                    dois.add(doi)
             except (KeyError, ValueError):
                 continue
     return dois
@@ -427,6 +438,9 @@ def _scholar_search_with_proxy_retries(query: str, headers: dict) -> tuple[int |
     proxies_list = get_request_proxy_chain()
     chain_summary = get_request_proxy_chain_summary()
     logger.info("Scholar proxy chain: %s (%d attempts)", chain_summary, len(proxies_list))
+    if not proxies_list:
+        logger.warning("Scholar proxy chain is empty; cannot query Google Scholar for %.60s", query)
+        return None
 
     last_e: requests.RequestException | None = None
     got_http_response = False  # True if any attempt got HTTP (even blocked/non-200)
@@ -493,8 +507,9 @@ def _is_blocked_response(html: str, url: str) -> bool:
 
 def _last_fetch_from_cache(cached: dict, doi: str, prefix: str) -> str | None:
     """Last fetch timestamp from cache: use fetched_at if present, else file mtime."""
-    if cached.get("fetched_at"):
-        return cached["fetched_at"]
+    fetched_at = cached.get("fetched_at")
+    if isinstance(fetched_at, str) and fetched_at:
+        return fetched_at
     p = _doi_metrics_cache_file(doi, prefix)
     if p is None:
         return None
@@ -841,12 +856,20 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
         now_iso = datetime.now().isoformat()
         warning = "Google Scholar request failed (network or proxy error)"
         prev_cached, _ = _read_cache(doi, "scholar")
+        previous_citations = (
+            prev_cached.get("citations")
+            if prev_cached is not None and prev_cached.get("found", True)
+            else None
+        )
+        previous_successful_fetch = (
+            prev_cached.get("last_successful_fetch") if prev_cached is not None else None
+        )
         _write_cache(
             doi,
             "scholar",
             {
                 "found": True,
-                "citations": None,
+                "citations": previous_citations,
                 "warning": warning,
                 "last_fetched_result": FETCH_RESULT_ERROR,
             },
@@ -855,9 +878,10 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
         )
         return ScholarCitationsResult(
             doi=doi,
-            citations=None,
+            citations=previous_citations,
             found=True,
             last_fetch=now_iso,
+            last_successful_fetch=previous_successful_fetch,
             last_fetched_result=FETCH_RESULT_ERROR,
             warning=warning,
         )
