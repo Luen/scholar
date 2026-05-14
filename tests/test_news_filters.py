@@ -48,9 +48,6 @@ def test_news_filters_exclude_404_and_irrelevant(monkeypatch, tmp_path):
             return _FakeResp(status_code=404)
         return _FakeResp(status_code=200)
 
-    def fake_get(url, *args, **kwargs):
-        raise AssertionError("requests.get should not be used for relevance fetching")
-
     def fake_scrapling_fetch(url: str, *, timeout_s: int = 8):
         if url.endswith("/ok"):
             return (
@@ -88,20 +85,19 @@ def test_news_filters_keep_on_network_errors(monkeypatch, tmp_path):
     scholar_id = "ynWS968AAAAJ"
     media = [
         {
-            "title": "Climate and baby sharks",
-            "description": "Comments from Associate Professor Jodie Rummer at JCU.",
+            "title": "External article with unavailable page text",
+            "description": "A source page whose preview text is not enough to classify.",
             "url": "https://example.test/flaky",
         }
     ]
     _write_scholar(tmp_path, scholar_id, media)
+    scrapling_calls: list[str] = []
 
     def fake_head(url, *args, **kwargs):
         return _FakeResp(status_code=200)
 
-    def fake_get(url, *args, **kwargs):
-        raise AssertionError("requests.get should not be used for relevance fetching")
-
     def fake_scrapling_fetch(url: str, *, timeout_s: int = 8):
+        scrapling_calls.append(url)
         return None
 
     monkeypatch.setattr(news_filters.requests, "head", fake_head)
@@ -111,7 +107,8 @@ def test_news_filters_keep_on_network_errors(monkeypatch, tmp_path):
     res = c.get(f"/scholar/{scholar_id}/news?limit=50")
     assert res.status_code == 200
     titles = [x.get("title") for x in res.json["media"]]
-    assert titles == ["Climate and baby sharks"]
+    assert titles == ["External article with unavailable page text"]
+    assert scrapling_calls == ["https://example.test/flaky"]
 
 
 def test_news_filters_drop_google_search_without_rummer_in_snippet(monkeypatch, tmp_path):

@@ -269,8 +269,8 @@ def filter_media_items(items: list[dict]) -> list[dict]:
     - for noisy sources (Google Custom Search, GNews), drop items whose
       title/description/content clearly fail Dr Jodie Rummer relevance
     - drop items with absolute URL that is definitively 404
-    - when title/description already match Dr Jodie Rummer (strict rules), keep the
-      item without fetching the URL (avoids Scrapling on every /news read for legacy JSON)
+    - when title/description/content already match Dr Jodie Rummer (strict rules),
+      keep the item without fetching the URL (avoids Scrapling on every /news read for legacy JSON)
     - otherwise fetch URL and drop if we confidently conclude the page is not about Rummer
     - keep on unknown (errors, blocked, non-HTML) to avoid false negatives
     - keep items without an absolute URL
@@ -290,17 +290,18 @@ def filter_media_items(items: list[dict]) -> list[dict]:
         description = (item.get("description") or "").strip()
         content = (item.get("content") or item.get("body") or "").strip()
         source = (item.get("source") or "").strip()
+        snippet_matches_rummer = does_article_mention_rummer(content, title, description)
         if (
             source in SNIPPET_FILTER_SOURCES
             and (title or description or content)
-            and not does_article_mention_rummer(content, title, description)
+            and not snippet_matches_rummer
         ):
             continue
 
         if url_is_definitely_404(url):
             continue
 
-        if does_article_mention_rummer(content, title, description):
+        if snippet_matches_rummer:
             filtered.append(item)
             continue
 
