@@ -8,6 +8,7 @@ from pathlib import Path
 from time import time
 
 import requests
+
 try:
     from scrapling.fetchers import FetcherSession  # type: ignore
 
@@ -44,6 +45,7 @@ RUMMER_CONTEXT_MARKERS = (
 
 NEWS_HTML_CACHE_DIR = Path(os.environ.get("CACHE_DIR", "cache")) / "news_html"
 NEWS_HTML_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def _news_html_cache_max_age_seconds() -> int | None:
     """
@@ -278,4 +280,3 @@ def filter_media_items(items: list[dict]) -> list[dict]:
 def clear_caches() -> None:
     url_is_definitely_404.cache_clear()
     url_page_is_about_rummer.cache_clear()
-

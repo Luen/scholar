@@ -15,6 +15,7 @@ import pytz
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+
 try:
     from scrapling.fetchers import FetcherSession  # type: ignore
 
@@ -38,21 +39,30 @@ REVALIDATE_TIME = 604800  # One week in seconds
 CACHE_DIR = Path(os.environ.get("CACHE_DIR", "cache"))
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-SEARCH_KEYWORDS = [
+# Phrases used for NewsAPI / Guardian / Google Custom Search OR-queries only.
+# Keep tight: broad terms ("marine biology JCU", "coral reef physiology") pull in unrelated pages.
+NEWS_OR_QUERY_PHRASES = [
     "Jodie Rummer",
     "Dr Jodie Rummer",
     "Dr. Jodie Rummer",
-    "Professor Rummer",
     "Professor Jodie Rummer",
-    "Professor Dr Jodie Rummer",
-    "Rummer",
-    "Rummerlab",
+    "Associate Professor Jodie Rummer",
+    "RummerLab",
+    "Physioshark",
+    "Physio shark",
+    "Physiologyfish",
+    "rummerjodie",
+    "rummerlab",
+    "@physioshark",
+    "@rummerlab",
+]
+
+# Substrings for tagging items that already passed strict relevance (not used for inclusion).
+TAG_PHRASES_FOR_KEYWORDS = [
+    "Jodie Rummer",
+    "RummerLab",
     "Physioshark",
     "Physiologyfish",
-    "James Cook University shark",
-    "JCU shark research",
-    "coral reef physiology",
-    "marine biology JCU",
 ]
 
 # Exclude articles about Kirstein Rummery (different person)
@@ -68,39 +78,6 @@ EXCLUDE_KEYWORDS = [
 
 # Primary Rummer-related terms (lab, project names)
 RUMMER_PRIMARY_KEYWORDS = ["rummerlab", "physioshark", "physiologyfish"]
-
-# Dr. Rummer specific mentions
-DR_RUMMER_MENTIONS = [
-    "dr rummer",
-    "dr. rummer",
-    "dr jodie rummer",
-    "dr. jodie rummer",
-    "professor rummer",
-    "prof rummer",
-    "prof jodie rummer",
-    "jodie rummer",
-    "jodie l. rummer",
-    "jodie l rummer",
-]
-
-MARINE_KEYWORDS = [
-    "marine",
-    "reef",
-    "shark",
-    "fish",
-    "ocean",
-    "coral",
-    "climate change",
-    "conservation",
-    "great barrier reef",
-    "marine science",
-    "marine biology",
-    "aquatic",
-    "ecosystem",
-    "marine life",
-    "marine conservation",
-    "marine research",
-]
 
 RSS_FEEDS = {
     "The Conversation": "https://theconversation.com/profiles/jodie-l-rummer-711270/articles.atom",
@@ -297,106 +274,112 @@ def strip_html(html: str) -> str:
     return text.strip()
 
 
-def find_matching_keywords(text: str) -> set[str]:
-    """Find all matching keywords in the text."""
-    text = text.lower()
-    return {keyword for keyword in SEARCH_KEYWORDS if keyword.lower() in text}
-
-
 def _is_about_kirstein_rummery(content: str, title: str, description: str) -> bool:
     """Exclude articles about Kirstein Rummery (different person)."""
     combined = f"{content} {title} {description}".lower()
     return any(kw in combined for kw in EXCLUDE_KEYWORDS)
 
 
+# Marine / institutional context: "Professor Rummer" in reef press often omits "Jodie" in the title.
+_RUMMER_MARINE_CONTEXT_TERMS = (
+    "jcu",
+    "james cook",
+    "shark",
+    "marine",
+    "coral",
+    "reef",
+    "fish",
+    "epaulette",
+    "physiolog",
+    "great barrier",
+    "barrier reef",
+    "climate",
+    "ocean",
+    "moorea",
+    "queensland",
+    "townsville",
+    "gb reef",
+    "gbr",
+)
+
+# When "Jodie" is absent, reject obvious non-marine / wrong-person hits.
+_RUMMER_FALSE_POSITIVE_WHEN_NO_JODIE = (
+    "eecs mourns",
+    "electrical engineering and computer",
+    "obituary",
+    "passed away",
+    "merriam-webster",
+    "definition of rummer",
+    "large-bowled",
+    "drinking glass",
+    "prunts",
+    "second rummer up",
+    "rummer development",
+    "mid-century homes",
+    "bob rummer",
+)
+
+
+def _collapsed_alnum(text: str) -> str:
+    """Lowercase and strip spaces/hyphens/underscores for handle-style matches."""
+    return re.sub(r"[\s\-_]+", "", text.lower())
+
+
 def does_article_mention_rummer(content: str, title: str, description: str) -> bool:
     """
-    Check if article mentions Dr. Rummer, RummerLab, or Physioshark.
-    Excludes articles about Kirstein Rummery.
+    True only when the piece is plausibly about Dr Jodie Rummer, RummerLab, or Physioshark.
+
+    Intentionally rejects: generic JCU marine/shark news, other people's obituaries,
+    dictionary 'rummer' (drinking glass), and unrelated 'Professor Rummer' mentions.
     """
-    normalized_content = f"{content} {title} {description}".lower()
-    normalized_title = title.lower()
-    normalized_desc = description.lower()
+    combined = f"{content} {title} {description}".lower()
+    title_l, desc_l = title.lower(), description.lower()
 
     if _is_about_kirstein_rummery(content, title, description):
         return False
 
-    # Rummer as standalone word (avoid matching "Rummery")
-    rummer_word = re.search(r"\brummer\b", normalized_content, re.I)
-    rummer_in_title = re.search(r"\brummer\b", normalized_title, re.I)
-    rummer_in_desc = re.search(r"\brummer\b", normalized_desc, re.I)
-    if rummer_word or rummer_in_title or rummer_in_desc:
+    if "jodie" not in combined and any(
+        fp in combined for fp in _RUMMER_FALSE_POSITIVE_WHEN_NO_JODIE
+    ):
+        return False
+
+    collapsed = _collapsed_alnum(f"{content}{title}{description}")
+    if "rummerlab" in collapsed or "physioshark" in collapsed or "physiologyfish" in collapsed:
         return True
 
-    # Primary keywords (RummerLab, Physioshark, etc.)
-    if any(
-        kw in normalized_content or kw in normalized_title or kw in normalized_desc
-        for kw in RUMMER_PRIMARY_KEYWORDS
+    if "jodie" in combined and re.search(r"\brummer\b", combined):
+        return True
+
+    if "rummerjodie" in collapsed:
+        return True
+
+    if re.search(r"\b(dr\.?|professor|prof\.?)\s+rummer\b", combined) and any(
+        ctx in combined for ctx in _RUMMER_MARINE_CONTEXT_TERMS
     ):
         return True
 
-    # Dr. Rummer specific mentions
-    if any(
-        m in normalized_content or m in normalized_title or m in normalized_desc
-        for m in DR_RUMMER_MENTIONS
+    if re.search(r"\bassociate\s+professor\s+rummer\b", combined) and (
+        "jodie" in combined or any(ctx in combined for ctx in _RUMMER_MARINE_CONTEXT_TERMS)
     ):
+        return True
+
+    if any(kw in combined or kw in title_l or kw in desc_l for kw in RUMMER_PRIMARY_KEYWORDS):
         return True
 
     return False
 
 
 def does_article_mention_keywords(content: str, title: str, description: str) -> set[str]:
-    """Check if article mentions any keywords and return the matching ones."""
-    normalized_content = f"{content} {title} {description}".lower()
+    """Return display tags only for items that pass strict Dr Jodie Rummer relevance."""
     if _is_about_kirstein_rummery(content, title, description):
         return set()
-    matching_keywords = find_matching_keywords(normalized_content)
-    if matching_keywords:
-        return matching_keywords
-    # Rummer word-boundary match
-    if re.search(r"\brummer\b", normalized_content, re.I):
-        return {"Rummer"}
-    # Marine + JCU fallback
-    if any(term.lower() in normalized_content for term in MARINE_KEYWORDS) and any(
-        term in normalized_content for term in ["jcu", "james cook university"]
-    ):
-        return {"marine research"}
-    return set()
-
-
-def might_be_marine_related(title: str, description: str) -> bool:
-    """Pre-filter: articles that might be marine/science related."""
-    text = f"{title} {description}".lower()
-    if "the conversation" in text:
-        return True
-    terms = [
-        "shark",
-        "fish",
-        "reef",
-        "coral",
-        "ocean",
-        "marine",
-        "sea",
-        "underwater",
-        "climate",
-        "warming",
-        "acidification",
-        "ecosystem",
-        "biology",
-        "science",
-        "research",
-        "study",
-        "university",
-        "jcu",
-        "james cook",
-        "great barrier",
-        "conservation",
-        "environment",
-        "species",
-        "wildlife",
-        "aquatic",
-    ]
-    return any(t in text for t in terms)
+    if not does_article_mention_rummer(content, title, description):
+        return set()
+    combined = f"{content} {title} {description}".lower()
+    tags = {p for p in TAG_PHRASES_FOR_KEYWORDS if p.lower() in combined}
+    if tags:
+        return tags
+    return {"Jodie Rummer"}
 
 
 def is_likely_english(text: str | None) -> bool:
@@ -632,22 +615,7 @@ def cached_request(
     return response
 
 
-# Feeds that use broader filter (Rummer OR marine keywords OR might-be-marine)
-BROADER_FILTER_FEEDS = frozenset(
-    {
-        "ABC News",
-        "Yahoo News AU",
-        "Cosmos Magazine",
-        "Oceanographic Magazine",
-        "Forbes",
-        "Google News",
-    }
-)
-
-
-def fetch_rss_feed(
-    url: str, source: str, headers=None, use_broader_filter: bool = False
-) -> list[MediaItem]:
+def fetch_rss_feed(url: str, source: str, headers=None) -> list[MediaItem]:
     """Fetch and parse an RSS feed."""
     if headers is None:
         headers = DEFAULT_HEADERS
@@ -664,24 +632,12 @@ def fetch_rss_feed(
             )
             description = getattr(item, "description", "") or getattr(item, "summary", "")
 
-            # Check for keywords (strict or broader filter)
             matching_keywords = does_article_mention_keywords(content, item.title, description)
             # Filter non-English articles (e.g. The Conversation can have multilingual)
             if source == "The Conversation" and not is_likely_english(item.title):
                 continue
 
-            if use_broader_filter:
-                has_rummer = does_article_mention_rummer(content, item.title, description)
-                has_marine = any(
-                    kw.lower() in f"{content} {item.title} {description}".lower()
-                    for kw in MARINE_KEYWORDS
-                )
-                might_marine = might_be_marine_related(item.title or "", description)
-                if not matching_keywords and not has_rummer and not has_marine and not might_marine:
-                    continue
-                if not matching_keywords:
-                    matching_keywords = {"marine/science"}
-            elif not matching_keywords:
+            if not matching_keywords:
                 continue
 
             # Get the most accurate date available
@@ -760,12 +716,8 @@ def fetch_newspaper4k_articles() -> list[MediaItem]:
                     title = (art.title or "").strip()
                     description = (art.summary or art.text or "")[:500].strip() if art.text else ""
                     matching_keywords = does_article_mention_keywords(content, title, description)
-                    if not matching_keywords and not does_article_mention_rummer(
-                        content, title, description
-                    ):
-                        continue
                     if not matching_keywords:
-                        matching_keywords = {"marine/science"}
+                        continue
                     date_val = getattr(art, "publish_date", None)
                     date_str = date_val.isoformat() if date_val is not None else None
                     media_item: MediaItem = {
@@ -804,7 +756,7 @@ def fetch_guardian_articles() -> list[MediaItem]:
     try:
         url = "https://content.guardianapis.com/search"
         params = {
-            "q": " OR ".join(f'"{keyword}"' for keyword in SEARCH_KEYWORDS),
+            "q": " OR ".join(f'"{phrase}"' for phrase in NEWS_OR_QUERY_PHRASES),
             "show-fields": "headline,trailText,thumbnail,bodyText",
             "api-key": api_key,
         }
@@ -885,7 +837,7 @@ def fetch_gnews_articles() -> list[MediaItem]:
             max_results=GNEWS_MAX_RESULTS,
         )
         # Query with main Rummer / lab terms (same theme as the existing Google News RSS)
-        query = "Jodie Rummer OR RummerLab OR Physioshark OR marine biology JCU"
+        query = '"Jodie Rummer" OR RummerLab OR Physioshark OR "Dr Jodie Rummer"'
         raw = google_news.get_news(query)
         if not raw:
             return articles
@@ -897,10 +849,8 @@ def fetch_gnews_articles() -> list[MediaItem]:
                 continue
             published = item.get("published date") or item.get("published_date") or ""
             matching_keywords = does_article_mention_keywords(description, title, "")
-            if not matching_keywords and not does_article_mention_rummer(description, title, ""):
-                continue
             if not matching_keywords:
-                matching_keywords = {"marine/science"}
+                continue
             publisher = (item.get("publisher") or "GNews").strip()
             media_item: MediaItem = {
                 "type": "article",
@@ -1004,7 +954,7 @@ def fetch_newsapi_articles() -> list[MediaItem]:
     try:
         url = "https://newsapi.org/v2/everything"
         # Create a complex query with all our keywords
-        query = " OR ".join([f'"{keyword}"' for keyword in SEARCH_KEYWORDS])
+        query = " OR ".join(f'"{phrase}"' for phrase in NEWS_OR_QUERY_PHRASES)
         params = {
             "q": query,
             "language": "en",
@@ -1064,8 +1014,7 @@ def fetch_all_news() -> list[MediaItem]:
     # Fetch from RSS feeds
     for source, url in RSS_FEEDS.items():
         try:
-            use_broader = source in BROADER_FILTER_FEEDS
-            articles = fetch_rss_feed(url, source, use_broader_filter=use_broader)
+            articles = fetch_rss_feed(url, source)
             all_articles.extend(articles)
             time.sleep(1)  # Be nice to the servers
         except Exception as e:
@@ -1090,8 +1039,8 @@ def fetch_all_news() -> list[MediaItem]:
     # Add Google Search results
     if enable_google_search:
         try:
-            for keyword in SEARCH_KEYWORDS:
-                google_results = fetch_google_search(f'"{keyword}"')
+            for phrase in NEWS_OR_QUERY_PHRASES:
+                google_results = fetch_google_search(f'"{phrase}"')
                 for item in google_results:
                     matching_keywords = does_article_mention_keywords(
                         item.get("snippet", ""), item.get("title", ""), ""

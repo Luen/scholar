@@ -11,12 +11,12 @@ from flask import Flask, jsonify, make_response, request, send_from_directory
 import src.cache_config  # noqa: F401 - configure HTTP cache before requests
 
 from .doi_utils import normalize_doi
+from .news_filters import filter_media_items
 from .scholar_citations import (
     fetch_altmetric_score,
     fetch_crossref_for_api,
     fetch_google_scholar_citations,
 )
-from .news_filters import filter_media_items
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,9 @@ def _load_scholar_data_or_error(scholar_id: str):
         return None, ({"error": "Invalid scholar data"}, 500)
 
 
-def _parse_pagination_args(default_limit: int = 50, max_limit: int = 200) -> tuple[int, int] | tuple[None, dict]:
+def _parse_pagination_args(
+    default_limit: int = 50, max_limit: int = 200
+) -> tuple[int, int] | tuple[None, dict]:
     try:
         limit = int(request.args.get("limit", str(default_limit)))
         offset = int(request.args.get("offset", "0"))

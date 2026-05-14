@@ -21,8 +21,7 @@ def _write_scholar(tmp_path, scholar_id, media):
 
 def test_news_filters_exclude_404_and_irrelevant(monkeypatch, tmp_path):
     # Import after tmp dir exists so we can patch module globals.
-    from src import serve
-    from src import news_filters
+    from src import news_filters, serve
 
     serve.SCHOLAR_DATA_DIR_ABS = str(tmp_path)
     news_filters.clear_caches()
@@ -46,7 +45,11 @@ def test_news_filters_exclude_404_and_irrelevant(monkeypatch, tmp_path):
 
     def fake_scrapling_fetch(url: str, *, timeout_s: int = 8):
         if url.endswith("/ok"):
-            return 200, "text/html; charset=utf-8", "<html><body>RummerLab physioshark</body></html>".lower()
+            return (
+                200,
+                "text/html; charset=utf-8",
+                "<html><body>RummerLab physioshark</body></html>".lower(),
+            )
         if url.endswith("/irrelevant"):
             return (
                 200,
@@ -69,8 +72,7 @@ def test_news_filters_exclude_404_and_irrelevant(monkeypatch, tmp_path):
 
 
 def test_news_filters_keep_on_network_errors(monkeypatch, tmp_path):
-    from src import serve
-    from src import news_filters
+    from src import news_filters, serve
 
     serve.SCHOLAR_DATA_DIR_ABS = str(tmp_path)
     news_filters.clear_caches()
@@ -110,4 +112,3 @@ def test_parts_news_is_rejected(monkeypatch, tmp_path):
     res = c.get(f"/scholar/{scholar_id}?parts=news")
     assert res.status_code == 400
     assert "News must be fetched via /scholar/<id>/news" in res.json["error"]
-
