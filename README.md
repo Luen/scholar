@@ -46,7 +46,9 @@ The stack includes:
 
 **Cron schedule** (in `cron/Dockerfile`): full scholar pipeline (`python -u main.py <id>`) at **00:00 every 14 days**; DOI metrics revalidation at **02:00 daily**; **`--refresh-news`** (fetch RSS/APIs, then filter + thumbnails) at **05:00 daily**; **`--bake-media-filtered`** (recompute filters/thumbnails from on-disk `media` only) at **12:00 daily** — each for the three scholar IDs in that file.
 
-After each successful `main.py` run, the pipeline writes **`media_filtered`** (and `media_filtered_at`) into the same `scholar_data/<id>.json` file. The `/scholar/<id>/news` API **serves that list** when present, so it does not re-run per-URL Scrapling on every HTTP request. Older JSON files without `media_filtered` still filter on read until the next full fetch; for those, items whose **title/description/content already match** Dr Jodie Rummer (strict rules) are kept **without** fetching each URL, which avoids the long Scrapling bursts you see when only `media` exists.
+After each successful `main.py` run, the pipeline writes **`media_filtered`** (and `media_filtered_at`) into the same `scholar_data/<id>.json` file. The `/scholar/<id>/news` API **serves that list** when present, so it does not re-run per-URL Scrapling on every HTTP request. If **`media_filtered` is missing** (new volume, old JSON, or cron has not written it yet), the API **re-runs `filter_media_items` on every `/news` request**, which can take many seconds and will log Scrapling fetches (e.g. Guardian, The Conversation) for rows that are not kept by strict snippet rules alone. **Fix:** run **`--bake-media-filtered`** or **`--refresh-news`** once per ID (see below), or wait for the daily cron job.
+
+Older JSON without `media_filtered` still filter on read; items whose **title/description/content already match** Dr Jodie Rummer (strict rules) are kept **without** fetching each URL, which shortens but does not eliminate on-request work for noisy sources.
 
 **Lightweight jobs (no Scholar scrape, `last_fetched` unchanged):**
 
@@ -93,6 +95,16 @@ HTTP responses are cached with [requests-cache](https://requests-cache.readthedo
 - Web page fetches for DOI extraction
 
 Set `CACHE_DIR` to change the cache location; `CACHE_EXPIRE_SECONDS` (default: 30 days) to control expiry.
+
+### Slow `/scholar/<id>/news` or Scrapling in web logs
+
+The **web** container only reads `scholar_data/<id>.json`. If that file has **`media` but no `media_filtered`**, every news request re-filters and may hit article URLs (Scrapling). After a fresh deploy or new Docker volume, bake once:
+
+```bash
+docker compose exec cron python -u main.py ynWS968AAAAJ --bake-media-filtered
+```
+
+Repeat for each scholar ID. Confirm the JSON contains a `media_filtered` array (and optional `media_filtered_at`). The API logs a **one-time warning per worker** when this fallback path is used.
 
 Wait for containers to be ready (check status with `docker compose ps`). Then to manually run the script:
 

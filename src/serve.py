@@ -21,6 +21,9 @@ from .scholar_citations import (
 
 logger = logging.getLogger(__name__)
 
+# One warning per scholar ID per process when /news falls back to live filtering (no media_filtered).
+_legacy_news_filter_warned: set[str] = set()
+
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False  # Preserve key order: doi first, then citations/score
 
@@ -74,7 +77,7 @@ def _load_scholar_data_or_error(scholar_id: str):
         return None, ({"error": "Invalid scholar data"}, 500)
 
 
-def _served_media_items(author: dict) -> list[dict]:
+def _served_media_items(author: dict, scholar_id: str | None = None) -> list[dict]:
     """
     Return media rows for the public /news API.
 
@@ -85,6 +88,15 @@ def _served_media_items(author: dict) -> list[dict]:
     precooked = author.get("media_filtered")
     if isinstance(precooked, list):
         return precooked
+    if scholar_id and scholar_id not in _legacy_news_filter_warned:
+        _legacy_news_filter_warned.add(scholar_id)
+        logger.warning(
+            "Scholar %s: JSON has no media_filtered list; /news is filtering media on each "
+            "request (slow, may fetch article URLs). Run: python -u main.py %s "
+            "--bake-media-filtered (or a full main.py run / wait for cron).",
+            scholar_id,
+            scholar_id,
+        )
     return filter_media_items(author.get("media", []) or [])
 
 
@@ -196,7 +208,7 @@ def get_scholar_news(id):
         body, status = err
         return jsonify(body), status
 
-    items = _served_media_items(data)
+    items = _served_media_items(data, scholar_id=id)
     page = _parse_pagination_args(default_limit=25, max_limit=200)
     if page[0] is None:
         return jsonify(page[1]), 400
