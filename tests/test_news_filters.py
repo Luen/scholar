@@ -151,6 +151,41 @@ def test_news_filters_drop_google_search_without_rummer_in_snippet(monkeypatch, 
     assert scrapling_calls == []
 
 
+def test_news_filters_snippet_match_skips_url_page_fetch(monkeypatch, tmp_path):
+    """When title/description pass strict relevance, do not call url_page_is_about_rummer."""
+    from src import news_filters, serve
+
+    serve.SCHOLAR_DATA_DIR_ABS = str(tmp_path)
+    news_filters.clear_caches()
+
+    scholar_id = "ynWS968AAAAJ"
+    media = [
+        {
+            "source": "The Guardian",
+            "title": "Professor Jodie Rummer on reef fish",
+            "description": "Research at James Cook University.",
+            "url": "https://example.test/guardian-article",
+        }
+    ]
+    _write_scholar(tmp_path, scholar_id, media)
+
+    def boom(_url: str):
+        raise RuntimeError("url_page_is_about_rummer should not run when snippet matches")
+
+    monkeypatch.setattr(news_filters, "url_page_is_about_rummer", boom)
+
+    def fake_head(url, *args, **kwargs):
+        return _FakeResp(status_code=200)
+
+    monkeypatch.setattr(news_filters.requests, "head", fake_head)
+
+    c = serve.app.test_client()
+    res = c.get(f"/scholar/{scholar_id}/news?limit=50")
+    assert res.status_code == 200
+    assert len(res.json["media"]) == 1
+    assert res.json["media"][0]["title"] == "Professor Jodie Rummer on reef fish"
+
+
 def test_parts_news_is_rejected(monkeypatch, tmp_path):
     from src import serve
 
