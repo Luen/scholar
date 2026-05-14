@@ -37,7 +37,7 @@ def test_ensure_thumbnail_skips_when_image_present(monkeypatch, tmp_path):
         "url": "https://example.com/p",
         "image": {"url": "https://cdn.example/i.jpg"},
     }
-    assert nt.ensure_thumbnail_for_item("ynWS968AAAAJ", item) is False
+    assert nt.ensure_thumbnail_for_item("ynWS968AAAAJ", item) == (False, False)
 
 
 def test_ensure_thumbnail_reuses_existing_file(monkeypatch, tmp_path):
@@ -51,7 +51,7 @@ def test_ensure_thumbnail_reuses_existing_file(monkeypatch, tmp_path):
     (tdir / name).write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 40)
 
     item = {"url": page, "title": "Hello <b>World</b>"}
-    assert nt.ensure_thumbnail_for_item(sid, item) is True
+    assert nt.ensure_thumbnail_for_item(sid, item) == (True, False)
     assert item["image"]["url"] == f"/scholar/{sid}/news/thumbnail/{name}"
     assert item["image"]["alt"] == "Hello World"
 
@@ -79,7 +79,7 @@ def test_ensure_thumbnail_downloads_and_writes(monkeypatch, tmp_path):
     )
 
     item = {"url": page, "title": "T"}
-    assert nt.ensure_thumbnail_for_item(sid, item) is True
+    assert nt.ensure_thumbnail_for_item(sid, item) == (True, True)
     digest = nt.url_hash(page)
     written = tmp_path / "news_thumbnails" / sid / f"{digest}.jpg"
     assert written.is_file()
@@ -111,3 +111,27 @@ def test_news_thumbnail_route_rejects_bad_filename(tmp_path):
     c = serve.app.test_client()
     res = c.get("/scholar/ynWS968AAAAJ/news/thumbnail/not-a-valid-name.jpg")
     assert res.status_code == 400
+
+
+def test_enrich_no_sleep_when_no_remote_io(monkeypatch, tmp_path):
+    monkeypatch.setenv("SCHOLAR_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("NEWS_THUMB_FETCH_DELAY_SECONDS", "0.5")
+    sleeps: list[float] = []
+    monkeypatch.setattr(nt.time, "sleep", lambda s: sleeps.append(s))
+    items = [
+        {"url": "", "title": "a"},
+        {"url": "https://x.test/a", "image": {"url": "https://cdn/z.jpg"}, "title": "b"},
+    ]
+    assert nt.enrich_filtered_media_thumbnails("ynWS968AAAAJ", items) == 0
+    assert sleeps == []
+
+
+def test_enrich_sleeps_after_html_fetch_attempt(monkeypatch, tmp_path):
+    monkeypatch.setenv("SCHOLAR_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("NEWS_THUMB_FETCH_DELAY_SECONDS", "0.01")
+    sleeps: list[float] = []
+    monkeypatch.setattr(nt.time, "sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr(nt, "_fetch_html_page", lambda url: None)
+    items = [{"url": "https://example.com/one", "title": "t"}]
+    assert nt.enrich_filtered_media_thumbnails("ynWS968AAAAJ", items) == 0
+    assert len(sleeps) == 1
