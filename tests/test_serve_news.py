@@ -79,6 +79,46 @@ def test_news_endpoint_omits_filtered_at_for_legacy_media(monkeypatch, tmp_path)
     assert "filtered_at" not in res.json
 
 
+def test_news_endpoint_warns_once_for_legacy_media(monkeypatch, tmp_path, caplog):
+    from src import serve
+
+    monkeypatch.setattr(serve, "SCHOLAR_DATA_DIR_ABS", str(tmp_path))
+    serve._legacy_news_filter_warned.clear()
+    _write_scholar(tmp_path, media_filtered=None)
+    monkeypatch.setattr(serve, "filter_media_items", lambda items: items)
+
+    c = serve.app.test_client()
+    caplog.set_level("WARNING", logger=serve.__name__)
+    for _ in range(2):
+        res = c.get(f"/scholar/{SCHOLAR_ID}/news?limit=50")
+        assert res.status_code == 200
+
+    warnings = [
+        record for record in caplog.records if "JSON has no media_filtered list" in record.message
+    ]
+    assert len(warnings) == 1
+
+
+def test_news_endpoint_skips_live_filter_for_empty_legacy_media(monkeypatch, tmp_path, caplog):
+    from src import serve
+
+    monkeypatch.setattr(serve, "SCHOLAR_DATA_DIR_ABS", str(tmp_path))
+    serve._legacy_news_filter_warned.clear()
+    _write_scholar(tmp_path, media=[], media_filtered=None)
+
+    def boom(*_a, **_k):
+        raise RuntimeError("filter_media_items must not run when media is empty")
+
+    monkeypatch.setattr(serve, "filter_media_items", boom)
+    c = serve.app.test_client()
+    caplog.set_level("WARNING", logger=serve.__name__)
+    res = c.get(f"/scholar/{SCHOLAR_ID}/news?limit=50")
+
+    assert res.status_code == 200
+    assert res.json["media"] == []
+    assert "JSON has no media_filtered list" not in caplog.text
+
+
 def test_profile_parts_excludes_all_news_fields(monkeypatch, tmp_path):
     from src import serve
 
