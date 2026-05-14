@@ -193,16 +193,19 @@ def _media_item_has_usable_image(item: dict[str, Any]) -> bool:
     return bool(u)
 
 
-def ensure_thumbnail_for_item(scholar_id: str, item: dict[str, Any]) -> bool:
+def ensure_thumbnail_for_item(scholar_id: str, item: dict[str, Any]) -> tuple[bool, bool]:
     """
     If item has an absolute article URL but no image, try og:image (etc.), download,
-    and set ``image`` to a local API path. Returns True if ``image`` was set/updated.
+    and set ``image`` to a local API path.
+
+    Returns ``(updated, remote_io_attempted)`` so callers can avoid throttling local-only
+    skips and cache hits.
     """
     if _media_item_has_usable_image(item):
-        return False
+        return False, False
     page_url = (item.get("url") or "").strip()
     if not page_url.startswith(("http://", "https://")):
-        return False
+        return False, False
 
     tdir = thumbnail_dir(scholar_id)
     digest = url_hash(page_url)
@@ -212,35 +215,35 @@ def ensure_thumbnail_for_item(scholar_id: str, item: dict[str, Any]) -> bool:
             "url": thumbnail_image_public_url(scholar_id, existing.name),
             "alt": strip_html((item.get("title") or "")[:500]),
         }
-        return True
+        return True, False
 
     html = _fetch_html_page(page_url)
     if not html:
-        return False
+        return False, True
     remote_image = extract_image_from_html(html, page_url)
     if not remote_image:
-        return False
+        return False, True
 
     raw = _download_image_bytes(remote_image)
     if not raw:
-        return False
+        return False, True
     sniffed = sniff_image_format(raw)
     if not sniffed:
         logger.debug("Not a recognised image format from %s", remote_image)
-        return False
+        return False, True
     ext, _mime = sniffed
     dest = tdir / f"{digest}.{ext}"
     try:
         dest.write_bytes(raw)
     except OSError as e:
         logger.warning("Could not write thumbnail %s: %s", dest, e)
-        return False
+        return False, True
 
     item["image"] = {
         "url": thumbnail_image_public_url(scholar_id, dest.name),
         "alt": strip_html((item.get("title") or "")[:500]),
     }
-    return True
+    return True, True
 
 
 def enrich_filtered_media_thumbnails(scholar_id: str, items: list[dict[str, Any]]) -> int:
@@ -250,12 +253,14 @@ def enrich_filtered_media_thumbnails(scholar_id: str, items: list[dict[str, Any]
     updated = 0
     delay = _thumb_delay_seconds()
     for item in items:
+        remote_io_attempted = False
         try:
-            if ensure_thumbnail_for_item(scholar_id, item):
+            item_updated, remote_io_attempted = ensure_thumbnail_for_item(scholar_id, item)
+            if item_updated:
                 updated += 1
         except Exception as e:
             logger.warning("Thumbnail step failed for %s: %s", item.get("url"), e)
-        if delay:
+        if remote_io_attempted and delay:
             time.sleep(delay)
     if updated:
         logger.info("News thumbnails: updated %d items for %s", updated, scholar_id)
