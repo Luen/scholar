@@ -1,0 +1,101 @@
+"""Tests for news thumbnail download and JSON enrichment."""
+
+from src import news_thumbnails as nt
+
+
+def test_max_image_bytes_invalid_env_uses_default(monkeypatch):
+    monkeypatch.setenv("NEWS_THUMB_MAX_BYTES", "not-a-number")
+    assert nt._max_image_bytes() == 2_500_000
+
+
+def test_sniff_image_format():
+    assert nt.sniff_image_format(b"\xff\xd8\xff" + b"\x00" * 20) == ("jpg", "image/jpeg")
+    assert nt.sniff_image_format(b"\x89PNG\r\n\x1a\n" + b"\x00" * 20) == ("png", "image/png")
+    assert nt.sniff_image_format(b"GIF89a" + b"\x00" * 20) == ("gif", "image/gif")
+    assert nt.sniff_image_format(b"RIFF" + b"\x00" * 4 + b"WEBP" + b"\x00" * 20) == (
+        "webp",
+        "image/webp",
+    )
+    assert nt.sniff_image_format(b"not an image") is None
+
+
+def test_ensure_thumbnail_skips_when_image_present(monkeypatch, tmp_path):
+    monkeypatch.setenv("SCHOLAR_DATA_DIR", str(tmp_path))
+    item = {
+        "url": "https://example.com/p",
+        "image": {"url": "https://cdn.example/i.jpg"},
+    }
+    assert nt.ensure_thumbnail_for_item("ynWS968AAAAJ", item) is False
+
+
+def test_ensure_thumbnail_reuses_existing_file(monkeypatch, tmp_path):
+    monkeypatch.setenv("SCHOLAR_DATA_DIR", str(tmp_path))
+    sid = "ynWS968AAAAJ"
+    page = "https://example.com/article"
+    digest = nt.url_hash(page)
+    tdir = tmp_path / "news_thumbnails" / sid
+    tdir.mkdir(parents=True)
+    name = f"{digest}.png"
+    (tdir / name).write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 40)
+
+    item = {"url": page, "title": "Hello <b>World</b>"}
+    assert nt.ensure_thumbnail_for_item(sid, item) is True
+    assert item["image"]["url"] == f"/scholar/{sid}/news/thumbnail/{name}"
+    assert item["image"]["alt"] == "Hello World"
+
+
+def test_ensure_thumbnail_downloads_and_writes(monkeypatch, tmp_path):
+    monkeypatch.setenv("SCHOLAR_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("NEWS_THUMB_FETCH_DELAY_SECONDS", "0")
+    sid = "ynWS968AAAAJ"
+    page = "https://example.com/story"
+    jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 200
+
+    monkeypatch.setattr(
+        nt,
+        "_fetch_html_page",
+        lambda url: (
+            '<meta property="og:image" content="https://cdn.example/x.jpg">'
+            if url == page
+            else None
+        ),
+    )
+    monkeypatch.setattr(
+        nt,
+        "_download_image_bytes",
+        lambda url, timeout_s=25: jpeg if "cdn.example" in url else None,
+    )
+
+    item = {"url": page, "title": "T"}
+    assert nt.ensure_thumbnail_for_item(sid, item) is True
+    digest = nt.url_hash(page)
+    written = tmp_path / "news_thumbnails" / sid / f"{digest}.jpg"
+    assert written.is_file()
+    assert written.read_bytes() == jpeg
+    assert f"/scholar/{sid}/news/thumbnail/{digest}.jpg" in item["image"]["url"]
+
+
+def test_news_thumbnail_route_serves_file(tmp_path):
+    from src import serve
+
+    serve.SCHOLAR_DATA_DIR_ABS = str(tmp_path)
+    sid = "ynWS968AAAAJ"
+    digest = nt.url_hash("https://rummerlab.org/x")
+    name = f"{digest}.jpg"
+    tdir = tmp_path / "news_thumbnails" / sid
+    tdir.mkdir(parents=True)
+    (tdir / name).write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 50)
+
+    c = serve.app.test_client()
+    res = c.get(f"/scholar/{sid}/news/thumbnail/{name}")
+    assert res.status_code == 200
+    assert res.mimetype == "image/jpeg"
+
+
+def test_news_thumbnail_route_rejects_bad_filename(tmp_path):
+    from src import serve
+
+    serve.SCHOLAR_DATA_DIR_ABS = str(tmp_path)
+    c = serve.app.test_client()
+    res = c.get("/scholar/ynWS968AAAAJ/news/thumbnail/not-a-valid-name.jpg")
+    assert res.status_code == 400

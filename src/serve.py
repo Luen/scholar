@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from email.utils import formatdate
 
-from flask import Flask, jsonify, make_response, request, send_from_directory
+from flask import Flask, jsonify, make_response, request, send_file, send_from_directory
 
 import src.cache_config  # noqa: F401 - configure HTTP cache before requests
 
@@ -28,6 +28,15 @@ SCHOLAR_DATA_DIR_ABS = os.path.abspath(SCHOLAR_DATA_DIR)
 
 # HTTP cache: clients revalidate after 1 day to pick up citation/score updates
 DOI_CACHE_MAX_AGE = 86400  # 1 day
+
+_THUMB_NAME_RE = re.compile(r"^[a-f0-9]{64}\.(?:jpe?g|png|gif|webp)$", re.IGNORECASE)
+_THUMB_MIMETYPE = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
 
 
 def _scholar_file_path(scholar_id: str) -> str | None:
@@ -198,6 +207,29 @@ def get_scholar_news(id):
     if isinstance(fat, str) and fat.strip():
         body["filtered_at"] = fat.strip()
     return jsonify(body)
+
+
+@app.route("/scholar/<id>/news/thumbnail/<filename>", methods=["GET"])
+def get_news_thumbnail(id, filename):
+    """Serve a precomputed news article thumbnail from disk (see ``news_thumbnails``)."""
+    if not _scholar_file_path(id):
+        return jsonify({"error": "Invalid id"}), 400
+    if not _THUMB_NAME_RE.match(filename):
+        return jsonify({"error": "Invalid filename"}), 400
+    thumb_root = os.path.join(SCHOLAR_DATA_DIR_ABS, "news_thumbnails", id)
+    path = os.path.join(thumb_root, filename)
+    try:
+        real_path = os.path.realpath(path)
+        real_root = os.path.realpath(thumb_root)
+        if os.path.commonpath([real_path, real_root]) != real_root:
+            return jsonify({"error": "Not found"}), 404
+    except (ValueError, OSError):
+        return jsonify({"error": "Not found"}), 404
+    if not os.path.isfile(real_path):
+        return "", 404
+    ext = os.path.splitext(filename)[1].lower()
+    mimetype = _THUMB_MIMETYPE.get(ext, "application/octet-stream")
+    return send_file(real_path, mimetype=mimetype, max_age=86400 * 30)
 
 
 @app.route("/scholar/<id>/gscholar", methods=["GET"])
