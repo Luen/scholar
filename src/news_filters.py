@@ -63,8 +63,8 @@ def _news_html_cache_max_age_seconds() -> int | None:
 
 NEWS_HTML_CACHE_MAX_AGE_SECONDS = _news_html_cache_max_age_seconds()
 
-# Sources where title/snippet often drift from the real page (Custom Search, GNews).
-SNIPPET_FILTER_SOURCES = frozenset({"Google Search", "GNews"})
+# Sources where title/snippet often drift from the real page.
+SNIPPET_FILTER_SOURCES = frozenset({"Google Search", "Google News", "GNews"})
 
 
 def _url_cache_key(url: str) -> str:
@@ -266,7 +266,7 @@ def url_page_is_about_rummer(url: str) -> bool | None:
 def filter_media_items(items: list[dict]) -> list[dict]:
     """
     Filter media items:
-    - for noisy sources (Google Custom Search, GNews), drop items whose
+    - for noisy Google-family sources, drop items whose
       title/description/content clearly fail Dr Jodie Rummer relevance
     - drop items with absolute URL that is definitively 404
     - when title/description already match Dr Jodie Rummer (strict rules), keep the
@@ -290,12 +290,14 @@ def filter_media_items(items: list[dict]) -> list[dict]:
         description = (item.get("description") or "").strip()
         content = (item.get("content") or item.get("body") or "").strip()
         source = (item.get("source") or "").strip()
-        if (
-            source in SNIPPET_FILTER_SOURCES
-            and (title or description or content)
-            and not does_article_mention_rummer(content, title, description)
-        ):
-            continue
+        if source in SNIPPET_FILTER_SOURCES:
+            # Mirror ingestion: Google-family snippets are checked as content,
+            # with title second. The relevance helper has boundary-sensitive handle
+            # checks (e.g. RummerLab), so field order must stay consistent.
+            snippet_content = content or description
+            snippet_description = description if content else ""
+            if not does_article_mention_rummer(snippet_content, title, snippet_description):
+                continue
 
         if url_is_definitely_404(url):
             continue
