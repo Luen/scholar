@@ -1057,6 +1057,10 @@ def fetch_all_news() -> list[MediaItem]:
     """Fetch news from all sources and combine them."""
     all_articles = list(CUSTOM_MEDIA_ADDITIONS)  # Manual additions first (win on URL/title dedup)
 
+    enable_google_search = os.getenv("NEWS_ENABLE_GOOGLE_SEARCH", "0") == "1"
+    enable_newspaper4k = os.getenv("NEWS_ENABLE_NEWSPAPER4K", "0") == "1"
+    enable_web_scrape = os.getenv("NEWS_ENABLE_WEB_SCRAPE", "0") == "1"
+
     # Fetch from RSS feeds
     for source, url in RSS_FEEDS.items():
         try:
@@ -1084,38 +1088,39 @@ def fetch_all_news() -> list[MediaItem]:
         logger.error(f"Error fetching NewsAPI articles: {str(e)}")
 
     # Add Google Search results
-    try:
-        for keyword in SEARCH_KEYWORDS:
-            google_results = fetch_google_search(f'"{keyword}"')
-            for item in google_results:
-                matching_keywords = does_article_mention_keywords(
-                    item.get("snippet", ""), item.get("title", ""), ""
-                )
+    if enable_google_search:
+        try:
+            for keyword in SEARCH_KEYWORDS:
+                google_results = fetch_google_search(f'"{keyword}"')
+                for item in google_results:
+                    matching_keywords = does_article_mention_keywords(
+                        item.get("snippet", ""), item.get("title", ""), ""
+                    )
 
-                if not matching_keywords:
-                    continue
+                    if not matching_keywords:
+                        continue
 
-                media_item: MediaItem = {
-                    "type": "article",
-                    "source": "Google Search",
-                    "title": strip_html(item.get("title", "")),
-                    "description": strip_html(item.get("snippet", "")),
-                    "url": item.get("link", ""),
-                    "date": standardize_date(None),
-                    "sourceType": "Other",
-                    "keywords": list(matching_keywords),
-                }
-
-                if item.get("pagemap", {}).get("cse_image"):
-                    media_item["image"] = {
-                        "url": item["pagemap"]["cse_image"][0]["src"],
-                        "alt": strip_html(item.get("title", "")),
+                    media_item: MediaItem = {
+                        "type": "article",
+                        "source": "Google Search",
+                        "title": strip_html(item.get("title", "")),
+                        "description": strip_html(item.get("snippet", "")),
+                        "url": item.get("link", ""),
+                        "date": standardize_date(None),
+                        "sourceType": "Other",
+                        "keywords": list(matching_keywords),
                     }
 
-                all_articles.append(media_item)
-            time.sleep(2)  # Be extra nice to Google's API
-    except Exception as e:
-        logger.error(f"Error in Google Search: {str(e)}")
+                    if item.get("pagemap", {}).get("cse_image"):
+                        media_item["image"] = {
+                            "url": item["pagemap"]["cse_image"][0]["src"],
+                            "alt": strip_html(item.get("title", "")),
+                        }
+
+                    all_articles.append(media_item)
+                time.sleep(2)  # Be extra nice to Google's API
+        except Exception as e:
+            logger.error(f"Error in Google Search: {str(e)}")
 
     # Add GNews (Google News via GNews package; RSS Google News is kept above)
     try:
@@ -1126,52 +1131,54 @@ def fetch_all_news() -> list[MediaItem]:
         logger.error(f"Error fetching GNews articles: {str(e)}")
 
     # Add Newspaper4k-discovered articles
-    try:
-        articles = fetch_newspaper4k_articles()
-        all_articles.extend(articles)
-        time.sleep(1)
-    except Exception as e:
-        logger.error(f"Error fetching Newspaper4k articles: {str(e)}")
+    if enable_newspaper4k:
+        try:
+            articles = fetch_newspaper4k_articles()
+            all_articles.extend(articles)
+            time.sleep(1)
+        except Exception as e:
+            logger.error(f"Error fetching Newspaper4k articles: {str(e)}")
 
     # Add web scraping results
-    news_sites = [
-        "https://www.townsvillebulletin.com.au/news/townsville",
-        "https://www.cairnspost.com.au/news/cairns",
-        "https://www.abc.net.au/news/topic/marine-biology",
-        "https://www.jcu.edu.au/news",
-        "https://www.aims.gov.au/news-and-media",  # Australian Institute of Marine Science
-        "https://www.gbrmpa.gov.au/news-room",  # Great Barrier Reef Marine Park Authority
-        "https://www.coralcoe.org.au/news",  # ARC Centre of Excellence for Coral Reef Studies
-        "https://nqherald.com.au/category/news/",  # North Queensland Register
-    ]
+    if enable_web_scrape:
+        news_sites = [
+            "https://www.townsvillebulletin.com.au/news/townsville",
+            "https://www.cairnspost.com.au/news/cairns",
+            "https://www.abc.net.au/news/topic/marine-biology",
+            "https://www.jcu.edu.au/news",
+            "https://www.aims.gov.au/news-and-media",  # Australian Institute of Marine Science
+            "https://www.gbrmpa.gov.au/news-room",  # Great Barrier Reef Marine Park Authority
+            "https://www.coralcoe.org.au/news",  # ARC Centre of Excellence for Coral Reef Studies
+            "https://nqherald.com.au/category/news/",  # North Queensland Register
+        ]
 
-    for site in news_sites:
-        try:
-            scraped_articles = scrape_web_content(site)
-            for item in scraped_articles:
-                matching_keywords = does_article_mention_keywords(
-                    "",  # We don't have full content
-                    item.get("title", ""),
-                    item.get("description", ""),
-                )
+        for site in news_sites:
+            try:
+                scraped_articles = scrape_web_content(site)
+                for item in scraped_articles:
+                    matching_keywords = does_article_mention_keywords(
+                        "",  # We don't have full content
+                        item.get("title", ""),
+                        item.get("description", ""),
+                    )
 
-                if not matching_keywords:
-                    continue
+                    if not matching_keywords:
+                        continue
 
-                media_item: MediaItem = {
-                    "type": "article",
-                    "source": f"{urlparse(site).netloc} (Scraped)",
-                    "title": strip_html(item.get("title", "")),
-                    "description": strip_html(item.get("description", "")),
-                    "url": item.get("link", ""),
-                    "date": standardize_date(item.get("date")),
-                    "sourceType": "Other",
-                    "keywords": list(matching_keywords),
-                }
-                all_articles.append(media_item)
-            time.sleep(2)  # Be nice to the servers
-        except Exception as e:
-            logger.error(f"Error scraping {site}: {str(e)}")
+                    media_item: MediaItem = {
+                        "type": "article",
+                        "source": f"{urlparse(site).netloc} (Scraped)",
+                        "title": strip_html(item.get("title", "")),
+                        "description": strip_html(item.get("description", "")),
+                        "url": item.get("link", ""),
+                        "date": standardize_date(item.get("date")),
+                        "sourceType": "Other",
+                        "keywords": list(matching_keywords),
+                    }
+                    all_articles.append(media_item)
+                time.sleep(2)  # Be nice to the servers
+            except Exception as e:
+                logger.error(f"Error scraping {site}: {str(e)}")
 
     # Deduplicate with source priorities (lower = higher priority)
     # Custom additions are added first, so they win over scraped duplicates (same URL/title)
