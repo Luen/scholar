@@ -1,8 +1,16 @@
 """Tests for cached news artifact maintenance in the main pipeline."""
 
+import importlib
 import json
+import sys
+import types
 
-import main as pipeline
+impact_factor_stub = types.ModuleType("src.journal_impact_factor")
+impact_factor_stub.add_impact_factor = lambda _journal_name, _impact_factor: None
+impact_factor_stub.load_impact_factor = lambda: {}
+sys.modules.setdefault("src.journal_impact_factor", impact_factor_stub)
+
+pipeline = importlib.import_module("main")
 
 
 def test_refresh_cached_news_artifacts_preserves_last_fetched(monkeypatch, tmp_path):
