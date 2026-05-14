@@ -9,7 +9,6 @@ from typing import Any
 import src.cache_config  # noqa: F401 - configure HTTP cache before any requests
 from src.config import Config
 from src.doi_resolver import resolve_doi_for_publication
-from src.journal_impact_factor import add_impact_factor, load_impact_factor
 from src.logging_config import setup_logging
 from src.news_filters import filter_media_items
 from src.news_scraper import get_news_data
@@ -98,6 +97,8 @@ def _enrich_publication(
         if journal_name in journal_impact_factor_dic:
             bib["impact_factor"] = journal_impact_factor_dic[journal_name]
         else:
+            from src.journal_impact_factor import add_impact_factor
+
             add_impact_factor(journal_name, "")
             bib["impact_factor"] = ""
 
@@ -197,6 +198,8 @@ def run(scholar_id: str, config: Config | None = None) -> int:
     log = logging.getLogger(__name__)
     if config is None:
         config = Config(scholar_id=scholar_id)
+
+    from src.journal_impact_factor import load_impact_factor
 
     journal_impact_factor_dic = load_impact_factor()
     log.info("Loaded %d impact factors", len(journal_impact_factor_dic))
