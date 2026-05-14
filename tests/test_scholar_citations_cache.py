@@ -49,6 +49,29 @@ def test_list_cached_dois_with_scholar_cache_falls_back_to_encoded_filename(monk
     assert sc.list_cached_dois_with_scholar_cache() == {normalize_doi(doi)}
 
 
+def test_list_cached_dois_with_scholar_cache_falls_back_for_non_object_json(monkeypatch, tmp_path):
+    monkeypatch.setattr(sc, "CACHE_DIR", str(tmp_path))
+    doi = "10.1002/(sici)1099-0844"
+    safe = sc._normalize_doi_for_cache(doi)
+    cache_path = tmp_path / f"scholar_{safe}.json"
+    cache_path.write_text("[]", encoding="utf-8")
+
+    assert sc.list_cached_dois_with_scholar_cache() == {normalize_doi(doi)}
+
+
+def test_read_cache_treats_non_object_json_as_miss(monkeypatch, tmp_path):
+    monkeypatch.setattr(sc, "CACHE_DIR", str(tmp_path))
+    doi = "10.1002/(sici)1099-0844"
+    cache_path = sc._doi_metrics_cache_file(doi, "scholar")
+    assert cache_path is not None
+    cache_path.write_text("[]", encoding="utf-8")
+
+    cached, expired = sc._read_cache(doi, "scholar")
+
+    assert cached is None
+    assert expired is True
+
+
 def test_list_cached_successful_dois_accepts_legacy_special_character_filename(
     monkeypatch, tmp_path
 ):
