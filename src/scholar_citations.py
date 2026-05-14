@@ -132,6 +132,16 @@ def _listdir_cache_json_path(name: str) -> Path | None:
         return None
 
 
+def _read_cache_json_object(path: Path) -> dict | None:
+    """Read a cache JSON object, treating malformed cache files as cache misses."""
+    try:
+        with path.open(encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def _normalize_doi_for_cache(doi: str) -> str:
     """Safe filename stem from DOI while preserving legacy simple filenames."""
     legacy_stem = normalize_doi(doi).replace("/", "_").replace(":", "_").strip()
@@ -153,14 +163,11 @@ def _doi_from_cache_filename(name: str, expected_prefix: str) -> str | None:
 
 def _doi_from_cache_file_or_name(path: Path, name: str, expected_prefix: str) -> str | None:
     """Read DOI from cache JSON, falling back to the legacy filename encoding."""
-    try:
-        with path.open(encoding="utf-8") as f:
-            data = json.load(f)
+    data = _read_cache_json_object(path)
+    if data is not None:
         doi = data.get("doi")
         if isinstance(doi, str) and doi.strip():
             return normalize_doi(doi)
-    except (json.JSONDecodeError, OSError):
-        pass
     return _doi_from_cache_filename(name, expected_prefix)
 
 
@@ -186,16 +193,17 @@ def _read_cache(doi: str, prefix: str) -> tuple[dict | None, bool]:
     if p is None or not p.is_file():
         return None, True
     try:
-        with p.open(encoding="utf-8") as f:
-            data = json.load(f)
+        data = _read_cache_json_object(p)
+        if data is None:
+            return None, True
         expires = data.get("expires_at")
-        if not expires:
+        if not isinstance(expires, str) or not expires:
             return None, True
         exp_dt = datetime.fromisoformat(expires)
         if datetime.now() > exp_dt:
             return data, True
         return data, False
-    except (json.JSONDecodeError, OSError, ValueError):
+    except (json.JSONDecodeError, OSError, TypeError, ValueError):
         return None, True
 
 
@@ -211,13 +219,12 @@ def list_cached_successful_dois() -> set[str]:
             p = _listdir_cache_json_path(name)
             if p is None:
                 continue
-            try:
-                with p.open(encoding="utf-8") as f:
-                    data = json.load(f)
-                if data.get("found") and data.get("doi") and not data.get("warning"):
-                    dois.add(normalize_doi(data["doi"]))
-            except (json.JSONDecodeError, OSError, KeyError):
+            data = _read_cache_json_object(p)
+            if data is None:
                 continue
+            doi = data.get("doi")
+            if data.get("found") and isinstance(doi, str) and doi and not data.get("warning"):
+                dois.add(normalize_doi(doi))
     return dois
 
 
@@ -251,13 +258,12 @@ def list_cached_dois_with_warning() -> set[str]:
             p = _listdir_cache_json_path(name)
             if p is None:
                 continue
-            try:
-                with p.open(encoding="utf-8") as f:
-                    data = json.load(f)
-                if data.get("warning") and data.get("doi"):
-                    dois.add(normalize_doi(data["doi"]))
-            except (json.JSONDecodeError, OSError, KeyError):
+            data = _read_cache_json_object(p)
+            if data is None:
                 continue
+            doi = data.get("doi")
+            if data.get("warning") and isinstance(doi, str) and doi:
+                dois.add(normalize_doi(doi))
     return dois
 
 
@@ -272,10 +278,8 @@ def touch_scholar_cache(doi: str) -> bool:
     p = _doi_metrics_cache_file(doi, "scholar")
     if p is None or not p.is_file():
         return False
-    try:
-        with p.open(encoding="utf-8") as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, OSError):
+    data = _read_cache_json_object(p)
+    if data is None:
         return False
     now = datetime.now()
     ttl = CACHE_SECONDS_BLOCKED_OR_WARNING if data.get("warning") else CACHE_SECONDS
@@ -303,18 +307,25 @@ def list_cached_successful_dois_older_than(seconds: int) -> set[str]:
             if p is None:
                 continue
             try:
-                with p.open(encoding="utf-8") as f:
-                    data = json.load(f)
-                if not data.get("found") or not data.get("doi") or data.get("warning"):
+                data = _read_cache_json_object(p)
+                if data is None:
+                    continue
+                doi = data.get("doi")
+                if (
+                    not data.get("found")
+                    or not isinstance(doi, str)
+                    or not doi
+                    or data.get("warning")
+                ):
                     continue
                 fetched_at = data.get("fetched_at")
-                if not fetched_at:
+                if not isinstance(fetched_at, str) or not fetched_at:
                     continue
                 fetched_dt = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
                 age_seconds = now.timestamp() - fetched_dt.timestamp()
                 if age_seconds >= seconds:
-                    dois.add(normalize_doi(data["doi"]))
-            except (json.JSONDecodeError, OSError, KeyError, ValueError):
+                    dois.add(normalize_doi(doi))
+            except (json.JSONDecodeError, OSError, KeyError, TypeError, ValueError):
                 continue
     return dois
 
