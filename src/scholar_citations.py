@@ -151,6 +151,29 @@ def _read_cache_json_object(path: Path) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
+def _normalized_doi_from_cache_data(data: dict) -> str | None:
+    """Return a normalized cache DOI when the field is present and string-like."""
+    doi = data.get("doi")
+    if not isinstance(doi, str) or not doi.strip():
+        return None
+    return normalize_doi(doi)
+
+
+def _parse_cache_datetime(value: object) -> datetime | None:
+    """Parse cache timestamps and ignore malformed values."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _now_for_comparison(dt: datetime) -> datetime:
+    """Return a current datetime compatible with ``dt`` for comparisons."""
+    return datetime.now(dt.tzinfo) if dt.tzinfo is not None else datetime.now()
+
+
 def _doi_from_cache_filename(name: str, expected_prefix: str) -> str | None:
     """Best-effort DOI recovery from cache filename for legacy or invalid JSON cache entries."""
     match = _CACHE_JSON_BASENAME_RE.match(name)
@@ -165,9 +188,9 @@ def _doi_from_cache_file_or_name(path: Path, name: str, expected_prefix: str) ->
     """Read DOI from cache JSON, falling back to the legacy filename encoding."""
     data = _read_cache_json_object(path)
     if data is not None:
-        doi = data.get("doi")
-        if isinstance(doi, str) and doi.strip():
-            return normalize_doi(doi)
+        doi = _normalized_doi_from_cache_data(data)
+        if doi:
+            return doi
     return _doi_from_cache_filename(name, expected_prefix)
 
 
@@ -196,14 +219,13 @@ def _read_cache(doi: str, prefix: str) -> tuple[dict | None, bool]:
         data = _read_cache_json_object(p)
         if data is None:
             return None, True
-        expires = data.get("expires_at")
-        if not expires:
+        exp_dt = _parse_cache_datetime(data.get("expires_at"))
+        if exp_dt is None:
             return None, True
-        exp_dt = datetime.fromisoformat(expires)
-        if datetime.now() > exp_dt:
+        if _now_for_comparison(exp_dt) > exp_dt:
             return data, True
         return data, False
-    except (json.JSONDecodeError, OSError, ValueError):
+    except (OSError, TypeError):
         return None, True
 
 
@@ -222,8 +244,9 @@ def list_cached_successful_dois() -> set[str]:
             data = _read_cache_json_object(p)
             if data is None:
                 continue
-            if data.get("found") and data.get("doi") and not data.get("warning"):
-                dois.add(normalize_doi(data["doi"]))
+            doi = _normalized_doi_from_cache_data(data)
+            if data.get("found") and doi and not data.get("warning"):
+                dois.add(doi)
     return dois
 
 
@@ -260,8 +283,9 @@ def list_cached_dois_with_warning() -> set[str]:
             data = _read_cache_json_object(p)
             if data is None:
                 continue
-            if data.get("warning") and data.get("doi"):
-                dois.add(normalize_doi(data["doi"]))
+            doi = _normalized_doi_from_cache_data(data)
+            if data.get("warning") and doi:
+                dois.add(doi)
     return dois
 
 
@@ -296,7 +320,6 @@ def list_cached_successful_dois_older_than(seconds: int) -> set[str]:
     dois: set[str] = set()
     if not os.path.isdir(CACHE_DIR):
         return dois
-    now = datetime.now()
     for prefix in ("scholar_", "altmetric_"):
         for name in os.listdir(CACHE_DIR):
             if not name.startswith(prefix) or not name.endswith(".json"):
@@ -308,16 +331,16 @@ def list_cached_successful_dois_older_than(seconds: int) -> set[str]:
                 data = _read_cache_json_object(p)
                 if data is None:
                     continue
-                if not data.get("found") or not data.get("doi") or data.get("warning"):
+                doi = _normalized_doi_from_cache_data(data)
+                if not data.get("found") or not doi or data.get("warning"):
                     continue
-                fetched_at = data.get("fetched_at")
-                if not fetched_at:
+                fetched_dt = _parse_cache_datetime(data.get("fetched_at"))
+                if fetched_dt is None:
                     continue
-                fetched_dt = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
-                age_seconds = now.timestamp() - fetched_dt.timestamp()
+                age_seconds = _now_for_comparison(fetched_dt).timestamp() - fetched_dt.timestamp()
                 if age_seconds >= seconds:
-                    dois.add(normalize_doi(data["doi"]))
-            except (KeyError, ValueError):
+                    dois.add(doi)
+            except (OSError, TypeError):
                 continue
     return dois
 

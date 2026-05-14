@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from src import scholar_citations as sc
 from src.doi_utils import normalize_doi
@@ -70,6 +70,50 @@ def test_read_cache_treats_non_object_json_as_miss(monkeypatch, tmp_path):
 
     assert cached is None
     assert expired is True
+
+
+def test_read_cache_treats_malformed_expiration_as_miss(monkeypatch, tmp_path):
+    monkeypatch.setattr(sc, "CACHE_DIR", str(tmp_path))
+    doi = "10.1002/(sici)1099-0844"
+    cache_path = sc._doi_metrics_cache_file(doi, "scholar")
+    assert cache_path is not None
+    cache_path.write_text(json.dumps({"expires_at": 123, "doi": doi}), encoding="utf-8")
+
+    cached, expired = sc._read_cache(doi, "scholar")
+
+    assert cached is None
+    assert expired is True
+
+
+def test_read_cache_accepts_timezone_aware_expiration(monkeypatch, tmp_path):
+    monkeypatch.setattr(sc, "CACHE_DIR", str(tmp_path))
+    doi = "10.1002/(sici)1099-0844"
+    cache_path = sc._doi_metrics_cache_file(doi, "scholar")
+    assert cache_path is not None
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat().replace("+00:00", "Z")
+    cache_path.write_text(json.dumps({"expires_at": expires_at, "doi": doi}), encoding="utf-8")
+
+    cached, expired = sc._read_cache(doi, "scholar")
+
+    assert cached is not None
+    assert expired is False
+
+
+def test_cache_listing_helpers_skip_non_string_doi_fields(monkeypatch, tmp_path):
+    monkeypatch.setattr(sc, "CACHE_DIR", str(tmp_path))
+    old_fetch = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    (tmp_path / "scholar_bad-success.json").write_text(
+        json.dumps({"doi": 123, "found": True, "fetched_at": old_fetch}),
+        encoding="utf-8",
+    )
+    (tmp_path / "altmetric_bad-warning.json").write_text(
+        json.dumps({"doi": ["not", "a", "doi"], "warning": "blocked"}),
+        encoding="utf-8",
+    )
+
+    assert sc.list_cached_successful_dois() == set()
+    assert sc.list_cached_dois_with_warning() == set()
+    assert sc.list_cached_successful_dois_older_than(60) == set()
 
 
 def test_list_cached_successful_dois_accepts_legacy_special_character_filename(
