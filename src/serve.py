@@ -28,6 +28,7 @@ SCHOLAR_DATA_DIR_ABS = os.path.abspath(SCHOLAR_DATA_DIR)
 
 # HTTP cache: clients revalidate after 1 day to pick up citation/score updates
 DOI_CACHE_MAX_AGE = 86400  # 1 day
+NEWS_FIELD_NAMES = ("media", "media_filtered", "media_filtered_at")
 
 
 def _scholar_file_path(scholar_id: str) -> str | None:
@@ -77,6 +78,12 @@ def _served_media_items(author: dict) -> list[dict]:
     if isinstance(precooked, list):
         return precooked
     return filter_media_items(author.get("media", []) or [])
+
+
+def _drop_news_fields(data: dict) -> None:
+    """Remove raw and pre-filtered news fields from a response payload."""
+    for field in NEWS_FIELD_NAMES:
+        data.pop(field, None)
 
 
 def _parse_pagination_args(
@@ -139,7 +146,7 @@ def get_scholar(id):
 
     # Optional: allow callers to request only certain parts to keep responses small.
     # Examples:
-    # - /scholar/<id>?parts=profile,news
+    # - /scholar/<id>?parts=profile
     parts_raw = request.args.get("parts") or request.args.get("fields")
     if not parts_raw:
         return jsonify(data)
@@ -151,7 +158,7 @@ def get_scholar(id):
 
     allowed = {"profile", "publications", "pubs", "all"}
     if not parts.issubset(allowed):
-        return jsonify({"error": "Invalid parts; allowed: profile, publications"}), 400
+        return jsonify({"error": "Invalid parts; allowed: profile, publications, pubs, all"}), 400
 
     if "all" in parts:
         return jsonify(data)
@@ -166,8 +173,8 @@ def get_scholar(id):
         profile = dict(data)
         if "publications" not in parts and "pubs" not in parts:
             profile.pop("publications", None)
-        # Always exclude media from /scholar/<id> parts mode; use /news endpoint.
-        profile.pop("media", None)
+        # Always exclude news from /scholar/<id> parts mode; use /news endpoint.
+        _drop_news_fields(profile)
         result["profile"] = profile
 
     return jsonify(result)
@@ -195,7 +202,7 @@ def get_scholar_news(id):
         "media": sliced,
     }
     fat = data.get("media_filtered_at")
-    if isinstance(fat, str) and fat.strip():
+    if isinstance(data.get("media_filtered"), list) and isinstance(fat, str) and fat.strip():
         body["filtered_at"] = fat.strip()
     return jsonify(body)
 
@@ -204,7 +211,7 @@ def get_scholar_news(id):
 def get_scholar_gscholar(id):
     """
     Get the Google-Scholar-derived profile data without large sub-resources.
-    By default this excludes `publications` and `media` to keep the payload cache-friendly.
+    By default this excludes `publications` and news fields to keep the payload cache-friendly.
     """
     data, err = _load_scholar_data_or_error(id)
     if err:
@@ -218,7 +225,7 @@ def get_scholar_gscholar(id):
     if not include_publications:
         result.pop("publications", None)
     if not include_news:
-        result.pop("media", None)
+        _drop_news_fields(result)
     return jsonify(result)
 
 
