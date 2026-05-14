@@ -90,11 +90,41 @@ def _doi_metrics_cache_root() -> Path:
     return Path(CACHE_DIR).resolve()
 
 
-def _resolved_path_under_doi_metrics_cache(path: str) -> Path | None:
-    """Return ``path`` resolved only if it lies under the DOI metrics cache directory."""
+_CACHE_JSON_BASENAME_RE = re.compile(
+    r"^(?P<prefix>crossref|scholar|altmetric)_(?P<safe>[A-Za-z0-9_.-]+)\.json$"
+)
+_ALLOWED_CACHE_PREFIX = frozenset({"crossref", "scholar", "altmetric"})
+
+
+def _doi_metrics_cache_file(doi: str, prefix: str) -> Path | None:
+    """Resolved cache file path for a DOI + kind, or ``None`` if inputs are not cache-safe."""
+    if prefix not in _ALLOWED_CACHE_PREFIX:
+        return None
+    doi_n = normalize_doi(doi)
+    safe = _normalize_doi_for_cache(doi_n)
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", safe):
+        return None
+    name = f"{prefix}_{safe}.json"
+    if not _CACHE_JSON_BASENAME_RE.match(name):
+        return None
+    os.makedirs(CACHE_DIR, exist_ok=True)
     try:
-        p = Path(path).resolve()
-        p.relative_to(_doi_metrics_cache_root())
+        base = _doi_metrics_cache_root()
+        p = (base / name).resolve()
+        p.relative_to(base)
+        return p
+    except (ValueError, OSError):
+        return None
+
+
+def _listdir_cache_json_path(name: str) -> Path | None:
+    """Resolve ``name`` under the DOI metrics cache root if it is a valid cache basename."""
+    if not _CACHE_JSON_BASENAME_RE.match(name):
+        return None
+    try:
+        base = _doi_metrics_cache_root()
+        p = (base / name).resolve()
+        p.relative_to(base)
         return p
     except (ValueError, OSError):
         return None
@@ -121,15 +151,9 @@ def _authors_contain_allowed(
     return any(a.lower() in combined for a in ALLOWED_AUTHORS)
 
 
-def _cache_path(doi: str, prefix: str) -> str:
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    safe = _normalize_doi_for_cache(doi)
-    return os.path.join(CACHE_DIR, f"{prefix}_{safe}.json")
-
-
-def _read_cache(path: str) -> tuple[dict | None, bool]:
+def _read_cache(doi: str, prefix: str) -> tuple[dict | None, bool]:
     """Return (cached_value, is_expired). Cached value has 'value' and 'expires_at'."""
-    p = _resolved_path_under_doi_metrics_cache(path)
+    p = _doi_metrics_cache_file(doi, prefix)
     if p is None or not p.is_file():
         return None, True
     try:
@@ -155,8 +179,7 @@ def list_cached_successful_dois() -> set[str]:
         for name in os.listdir(CACHE_DIR):
             if not name.startswith(prefix) or not name.endswith(".json"):
                 continue
-            path = os.path.join(CACHE_DIR, name)
-            p = _resolved_path_under_doi_metrics_cache(path)
+            p = _listdir_cache_json_path(name)
             if p is None:
                 continue
             try:
@@ -195,8 +218,7 @@ def list_cached_dois_with_warning() -> set[str]:
         for name in os.listdir(CACHE_DIR):
             if not name.startswith(prefix) or not name.endswith(".json"):
                 continue
-            path = os.path.join(CACHE_DIR, name)
-            p = _resolved_path_under_doi_metrics_cache(path)
+            p = _listdir_cache_json_path(name)
             if p is None:
                 continue
             try:
@@ -217,8 +239,7 @@ def touch_scholar_cache(doi: str) -> bool:
     Returns True if the cache file was updated, False if no file exists.
     """
     doi = normalize_doi(doi)
-    path = _cache_path(doi, "scholar")
-    p = _resolved_path_under_doi_metrics_cache(path)
+    p = _doi_metrics_cache_file(doi, "scholar")
     if p is None or not p.is_file():
         return False
     try:
@@ -248,8 +269,7 @@ def list_cached_successful_dois_older_than(seconds: int) -> set[str]:
         for name in os.listdir(CACHE_DIR):
             if not name.startswith(prefix) or not name.endswith(".json"):
                 continue
-            path = os.path.join(CACHE_DIR, name)
-            p = _resolved_path_under_doi_metrics_cache(path)
+            p = _listdir_cache_json_path(name)
             if p is None:
                 continue
             try:
@@ -270,9 +290,10 @@ def list_cached_successful_dois_older_than(seconds: int) -> set[str]:
 
 
 def _write_cache(
-    path: str,
+    doi: str,
+    prefix: str,
     value: dict,
-    doi: str = "",
+    *,
     cache_seconds: int | None = None,
     previous_cached: dict | None = None,
 ) -> None:
@@ -280,6 +301,7 @@ def _write_cache(
     Write cache entry. value should include last_fetched_result.
     When last_fetched_result != success, last_successful_fetch is preserved from previous_cached.
     """
+    doi_key = normalize_doi(doi)
     now = datetime.now()
     ttl = cache_seconds if cache_seconds is not None else CACHE_SECONDS
     expires = now + timedelta(seconds=ttl)
@@ -287,7 +309,7 @@ def _write_cache(
         **value,
         "expires_at": expires.isoformat(),
         "fetched_at": now.isoformat(),
-        "doi": doi,
+        "doi": doi_key,
     }
     if data.get("last_fetched_result") == FETCH_RESULT_SUCCESS:
         data["last_successful_fetch"] = now.isoformat()
@@ -295,9 +317,11 @@ def _write_cache(
         prev = previous_cached.get("last_successful_fetch")
         if prev:
             data["last_successful_fetch"] = prev
-    p = _resolved_path_under_doi_metrics_cache(path)
+    p = _doi_metrics_cache_file(doi_key, prefix)
     if p is None:
-        logger.warning("Refusing to write cache outside cache directory (%s)", path)
+        logger.warning(
+            "Refusing to write DOI metrics cache (invalid doi/prefix): %s %s", doi_key, prefix
+        )
         return
     try:
         with p.open("w", encoding="utf-8") as f:
@@ -434,11 +458,11 @@ def _is_blocked_response(html: str, url: str) -> bool:
     return False
 
 
-def _last_fetch_from_cache(cached: dict, path: str) -> str | None:
+def _last_fetch_from_cache(cached: dict, doi: str, prefix: str) -> str | None:
     """Last fetch timestamp from cache: use fetched_at if present, else file mtime."""
     if cached.get("fetched_at"):
         return cached["fetched_at"]
-    p = _resolved_path_under_doi_metrics_cache(path)
+    p = _doi_metrics_cache_file(doi, prefix)
     if p is None:
         return None
     try:
@@ -454,8 +478,7 @@ def get_crossref_metadata_cached(doi: str, force_refresh: bool = False) -> Cross
     endpoint instead of hitting the API separately. On cache miss, fetches from API and writes cache.
     """
     doi = normalize_doi(doi)
-    path = _cache_path(doi, "crossref")
-    cached, expired = _read_cache(path)
+    cached, expired = _read_cache(doi, "crossref")
     if not force_refresh and cached is not None and not expired:
         if cached.get("found") and cached.get("data"):
             message = (cached.get("data") or {}).get("message")
@@ -470,9 +493,9 @@ def get_crossref_metadata_cached(doi: str, force_refresh: bool = False) -> Cross
     if not message:
         return None
     _write_cache(
-        path,
+        doi,
+        "crossref",
         {"found": True, "data": raw, "last_fetched_result": FETCH_RESULT_SUCCESS},
-        doi=doi,
         cache_seconds=CACHE_SECONDS_CROSSREF,
     )
     return crossref_response_from_message(message)
@@ -498,8 +521,7 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
     force_refresh is for dev only (e.g. ?refresh=1); production/cron should not use it.
     """
     doi = normalize_doi(doi)
-    path = _cache_path(doi, "altmetric")
-    cached, expired = _read_cache(path)
+    cached, expired = _read_cache(doi, "altmetric")
     if not force_refresh and cached is not None and not expired:
         # If we have a cached 401, re-check Crossref; author may have been added or cache was stale
         if cached.get("found") is False and cached.get("error_reason") == "Author not in allowlist":
@@ -515,7 +537,7 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
                     score=cached.get("score"),
                     found=False,
                     details=cached.get("details"),
-                    last_fetch=_last_fetch_from_cache(cached, path),
+                    last_fetch=_last_fetch_from_cache(cached, doi, "altmetric"),
                     last_successful_fetch=cached.get("last_successful_fetch"),
                     last_fetched_result=cached.get("last_fetched_result"),
                     error_reason=cached.get("error_reason"),
@@ -526,7 +548,7 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
                 score=cached.get("score"),
                 found=cached.get("found", True),
                 details=cached.get("details"),
-                last_fetch=_last_fetch_from_cache(cached, path),
+                last_fetch=_last_fetch_from_cache(cached, doi, "altmetric"),
                 last_successful_fetch=cached.get("last_successful_fetch"),
                 last_fetched_result=cached.get("last_fetched_result"),
                 error_reason=cached.get("error_reason"),
@@ -549,7 +571,8 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
         now_iso = datetime.now().isoformat()
         result_code = FETCH_RESULT_AUTHOR_NOT_ALLOWED if crossref else FETCH_RESULT_NOT_FOUND
         _write_cache(
-            path,
+            doi,
+            "altmetric",
             {
                 "found": False,
                 "score": None,
@@ -557,7 +580,6 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
                 "error_reason": reason,
                 "last_fetched_result": result_code,
             },
-            doi=doi,
             previous_cached=cached if cached is not None else None,
         )
         return AltmetricResult(
@@ -579,14 +601,14 @@ def fetch_altmetric_score(doi: str, force_refresh: bool = False) -> AltmetricRes
         score = None
     now_iso = datetime.now().isoformat()
     _write_cache(
-        path,
+        doi,
+        "altmetric",
         {
             "found": True,
             "score": score,
             "details": details_dict,
             "last_fetched_result": FETCH_RESULT_SUCCESS,
         },
-        doi=doi,
     )
     return AltmetricResult(
         doi=doi,
@@ -621,8 +643,7 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
     force_refresh is for dev only (e.g. ?refresh=1); production/cron should not use it.
     """
     doi = normalize_doi(doi)
-    path = _cache_path(doi, "scholar")
-    cached, expired = _read_cache(path)
+    cached, expired = _read_cache(doi, "scholar")
     if not force_refresh and cached is not None and not expired:
         # If we have a cached 401, re-check Crossref; author may have been added or cache was stale
         if (
@@ -640,7 +661,7 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
                     doi=doi,
                     citations=cached.get("citations"),
                     found=False,
-                    last_fetch=_last_fetch_from_cache(cached, path),
+                    last_fetch=_last_fetch_from_cache(cached, doi, "scholar"),
                     last_successful_fetch=cached.get("last_successful_fetch"),
                     last_fetched_result=cached.get("last_fetched_result"),
                     error_reason=cached.get("error_reason"),
@@ -651,7 +672,7 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
                 doi=doi,
                 citations=cached.get("citations"),
                 found=cached.get("found", True),
-                last_fetch=_last_fetch_from_cache(cached, path),
+                last_fetch=_last_fetch_from_cache(cached, doi, "scholar"),
                 last_successful_fetch=cached.get("last_successful_fetch"),
                 last_fetched_result=cached.get("last_fetched_result"),
                 error_reason=cached.get("error_reason"),
@@ -675,14 +696,14 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
         now_iso = datetime.now().isoformat()
         result_code = FETCH_RESULT_AUTHOR_NOT_ALLOWED if crossref else FETCH_RESULT_NOT_FOUND
         _write_cache(
-            path,
+            doi,
+            "scholar",
             {
                 "found": False,
                 "citations": None,
                 "error_reason": reason,
                 "last_fetched_result": result_code,
             },
-            doi=doi,
             previous_cached=cached if cached is not None else None,
         )
         return ScholarCitationsResult(
@@ -711,14 +732,14 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
             if cached is not None and cached.get("found", True):
                 # Keep existing data but update fetched_at so last_fetch reflects this run
                 _write_cache(
-                    path,
+                    doi,
+                    "scholar",
                     {
                         "found": True,
                         "citations": cached.get("citations"),
                         "warning": cached.get("warning") or warning,
                         "last_fetched_result": FETCH_RESULT_BLOCKED,
                     },
-                    doi=doi,
                     cache_seconds=CACHE_SECONDS_BLOCKED_OR_WARNING,
                     previous_cached=cached,
                 )
@@ -732,14 +753,14 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
                     warning=cached.get("warning") or warning,
                 )
             _write_cache(
-                path,
+                doi,
+                "scholar",
                 {
                     "found": True,
                     "citations": None,
                     "warning": warning,
                     "last_fetched_result": FETCH_RESULT_BLOCKED,
                 },
-                doi=doi,
                 cache_seconds=CACHE_SECONDS_BLOCKED_OR_WARNING,
                 previous_cached=cached if cached is not None else None,
             )
@@ -769,9 +790,9 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
 
         now_iso = datetime.now().isoformat()
         _write_cache(
-            path,
+            doi,
+            "scholar",
             {"found": True, "citations": citations, "last_fetched_result": FETCH_RESULT_SUCCESS},
-            doi=doi,
         )
         return ScholarCitationsResult(
             doi=doi,
@@ -786,20 +807,16 @@ def fetch_google_scholar_citations(doi: str, force_refresh: bool = False) -> Sch
         logger.warning("Failed to scrape Google Scholar citations for DOI %s: %s", doi, e)
         now_iso = datetime.now().isoformat()
         warning = "Google Scholar request failed (network or proxy error)"
-        # Preserve last_successful_fetch from existing cache if present
-        try:
-            prev_cached, _ = _read_cache(path)
-        except Exception:
-            prev_cached = None
+        prev_cached, _ = _read_cache(doi, "scholar")
         _write_cache(
-            path,
+            doi,
+            "scholar",
             {
                 "found": True,
                 "citations": None,
                 "warning": warning,
                 "last_fetched_result": FETCH_RESULT_ERROR,
             },
-            doi=doi,
             cache_seconds=CACHE_SECONDS_BLOCKED_OR_WARNING,
             previous_cached=prev_cached,
         )
@@ -832,14 +849,13 @@ def fetch_crossref_for_api(doi: str, force_refresh: bool = False) -> CrossrefRes
     Returns the full API response (status, message-type, message) for the /crossref/<doi> endpoint.
     """
     doi = normalize_doi(doi)
-    path = _cache_path(doi, "crossref")
-    cached, expired = _read_cache(path)
+    cached, expired = _read_cache(doi, "crossref")
     if not force_refresh and cached is not None and not expired:
         return CrossrefResult(
             doi=doi,
             found=cached.get("found", True),
             data=cached.get("data"),
-            last_fetch=_last_fetch_from_cache(cached, path),
+            last_fetch=_last_fetch_from_cache(cached, doi, "crossref"),
             last_successful_fetch=cached.get("last_successful_fetch"),
             last_fetched_result=cached.get("last_fetched_result"),
             error_reason=cached.get("error_reason"),
@@ -853,14 +869,14 @@ def fetch_crossref_for_api(doi: str, force_refresh: bool = False) -> CrossrefRes
             reason = "Crossref API error or DOI not found"
         result_code = FETCH_RESULT_ERROR if not raw else FETCH_RESULT_NOT_FOUND
         _write_cache(
-            path,
+            doi,
+            "crossref",
             {
                 "found": False,
                 "data": None,
                 "error_reason": reason,
                 "last_fetched_result": result_code,
             },
-            doi=doi,
             cache_seconds=CACHE_SECONDS_CROSSREF,
             previous_cached=cached if cached is not None else None,
         )
@@ -874,9 +890,9 @@ def fetch_crossref_for_api(doi: str, force_refresh: bool = False) -> CrossrefRes
         )
 
     _write_cache(
-        path,
+        doi,
+        "crossref",
         {"found": True, "data": raw, "last_fetched_result": FETCH_RESULT_SUCCESS},
-        doi=doi,
         cache_seconds=CACHE_SECONDS_CROSSREF,
     )
     return CrossrefResult(

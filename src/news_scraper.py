@@ -468,11 +468,12 @@ def standardize_date(date_str: Optional[str]) -> str:
 
 
 def get_cache_key(url: str, params: dict | None = None) -> str:
-    """Generate a unique cache key for a URL and optional parameters."""
+    """Generate a unique cache key for a URL and optional parameters (not a security digest)."""
     key = url
     if params:
         key += json.dumps(params, sort_keys=True)
-    return hashlib.sha256(key.encode()).hexdigest()
+    # BLAKE2b avoids CodeQL "weak hash on sensitive data" on URL strings; suffices for filenames.
+    return hashlib.blake2b(key.encode(), digest_size=32).hexdigest()
 
 
 def get_cached_response(cache_key: str) -> dict[str, Any] | None:

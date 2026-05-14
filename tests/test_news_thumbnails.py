@@ -153,7 +153,9 @@ def test_mirror_remote_downloads_and_rewrites_url(monkeypatch, tmp_path):
     )
     item = {"url": "https://youtube.com/x", "image": {"url": img_url, "alt": "Keep"}}
     assert nt.mirror_remote_item_image(sid, item) == (True, True)
-    assert "/scholar/ynWS968AAAAJ/news/thumbnail/" in item["image"]["url"]
+    u = item["image"]["url"]
+    path = urlparse(u).path if u.startswith("http") else u
+    assert path.startswith(f"/scholar/{sid}/news/thumbnail/")
     assert item["image"]["alt"] == "Keep"
     digest = nt.url_hash(img_url)
     assert (tmp_path / "news_thumbnails" / sid / f"{digest}.jpg").is_file()

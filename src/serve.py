@@ -44,17 +44,31 @@ _THUMB_MIMETYPE = {
 }
 
 
-def _scholar_file_path(scholar_id: str) -> str | None:
-    """Return safe path to scholar JSON file, or None if invalid."""
+def _validated_scholar_id(scholar_id: str) -> str | None:
+    """Return ``scholar_id`` if it is a safe basename segment, else ``None``."""
     if len(scholar_id) != 12 or not re.match(r"^[a-zA-Z0-9_-]+$", scholar_id):
+        return None
+    return scholar_id
+
+
+def _scholar_data_path_for_id(scholar_id: str) -> Path | None:
+    """Resolved path to ``<id>.json`` under ``SCHOLAR_DATA_DIR_ABS``, or ``None``."""
+    vid = _validated_scholar_id(scholar_id)
+    if not vid:
         return None
     try:
         base = Path(SCHOLAR_DATA_DIR_ABS).resolve()
-        candidate = (base / f"{scholar_id}.json").resolve()
+        candidate = (base / f"{vid}.json").resolve()
         candidate.relative_to(base)
+        return candidate
     except (ValueError, OSError):
         return None
-    return str(candidate)
+
+
+def _scholar_file_path(scholar_id: str) -> str | None:
+    """Return safe path to scholar JSON file, or None if invalid."""
+    p = _scholar_data_path_for_id(scholar_id)
+    return str(p) if p else None
 
 
 def _load_scholar_data_or_error(scholar_id: str):
@@ -64,11 +78,11 @@ def _load_scholar_data_or_error(scholar_id: str):
     """
     if not scholar_id:
         return None, ({"error": "Missing id"}, 400)
-    filepath = _scholar_file_path(scholar_id)
-    if not filepath:
+    p = _scholar_data_path_for_id(scholar_id)
+    if not p:
         return None, ({"error": "Invalid id"}, 400)
     try:
-        with Path(filepath).open(encoding="utf-8") as f:
+        with p.open(encoding="utf-8") as f:
             data = json.load(f)
         return data, None
     except FileNotFoundError:
@@ -233,13 +247,14 @@ def get_scholar_news(id):
 @app.route("/scholar/<id>/news/thumbnail/<filename>", methods=["GET"])
 def get_news_thumbnail(id, filename):
     """Serve a precomputed news article thumbnail from disk (see ``news_thumbnails``)."""
-    if not _scholar_file_path(id):
+    vid = _validated_scholar_id(id)
+    if not vid:
         return jsonify({"error": "Invalid id"}), 400
     if not _THUMB_NAME_RE.match(filename):
         return jsonify({"error": "Invalid filename"}), 400
     try:
         base = Path(SCHOLAR_DATA_DIR_ABS).resolve()
-        thumb_root = (base / "news_thumbnails" / id).resolve()
+        thumb_root = (base / "news_thumbnails" / vid).resolve()
         thumb_root.relative_to(base)
         real_path = (thumb_root / filename).resolve()
         real_path.relative_to(thumb_root)
