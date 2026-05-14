@@ -46,7 +46,7 @@ The stack includes:
 
 **Cron schedule** (in `cron/Dockerfile`): full scholar pipeline (`python main.py <id>`) at **00:00 every 14 days**; DOI metrics revalidation at **02:00 daily**; **`--refresh-news`** (fetch RSS/APIs, then filter + thumbnails) at **05:00 daily**; **`--bake-media-filtered`** (recompute filters/thumbnails from on-disk `media` only) at **12:00 daily** — each for the three scholar IDs in that file.
 
-After each successful `main.py` run, the pipeline writes **`media_filtered`** (and `media_filtered_at`) into the same `scholar_data/<id>.json` file. The `/scholar/<id>/news` API **serves that list** when present, so it does not re-run per-URL Scrapling on every HTTP request. Older JSON files without `media_filtered` still filter on read until the next full fetch; for those, items whose **title/description already match** Dr Jodie Rummer (strict rules) are kept **without** fetching each URL, which avoids the long Scrapling bursts you see when only `media` exists.
+After each successful `main.py` run, the pipeline writes **`media_filtered`** (and `media_filtered_at`) into the same `scholar_data/<id>.json` file. The `/scholar/<id>/news` API **serves that list** when present, so it does not re-run per-URL Scrapling on every HTTP request. Older JSON files without `media_filtered` still filter on read until the next full fetch; for those, items whose **title/description/content already match** Dr Jodie Rummer (strict rules) are kept **without** fetching each URL, which avoids the long Scrapling bursts you see when only `media` exists.
 
 **Lightweight jobs (no Scholar scrape, `last_fetched` unchanged):**
 

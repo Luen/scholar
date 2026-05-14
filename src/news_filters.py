@@ -269,8 +269,8 @@ def filter_media_items(items: list[dict]) -> list[dict]:
     - for noisy Google-family sources, drop items whose
       title/description/content clearly fail Dr Jodie Rummer relevance
     - drop items with absolute URL that is definitively 404
-    - when title/description already match Dr Jodie Rummer (strict rules), keep the
-      item without fetching the URL (avoids Scrapling on every /news read for legacy JSON)
+    - when title/description/content already match Dr Jodie Rummer (strict rules),
+      keep the item without fetching the URL (avoids Scrapling on every /news read for legacy JSON)
     - otherwise fetch URL and drop if we confidently conclude the page is not about Rummer
     - keep on unknown (errors, blocked, non-HTML) to avoid false negatives
     - keep items without an absolute URL
@@ -291,18 +291,26 @@ def filter_media_items(items: list[dict]) -> list[dict]:
         content = (item.get("content") or item.get("body") or "").strip()
         source = (item.get("source") or "").strip()
         if source in SNIPPET_FILTER_SOURCES:
-            # Mirror ingestion: Google-family snippets are checked as content,
-            # with title second. The relevance helper has boundary-sensitive handle
-            # checks (e.g. RummerLab), so field order must stay consistent.
             snippet_content = content or description
             snippet_description = description if content else ""
-            if not does_article_mention_rummer(snippet_content, title, snippet_description):
-                continue
+        else:
+            snippet_content = content
+            snippet_description = description
+
+        snippet_matches_rummer = does_article_mention_rummer(
+            snippet_content, title, snippet_description
+        )
+        if (
+            source in SNIPPET_FILTER_SOURCES
+            and (title or description or content)
+            and not snippet_matches_rummer
+        ):
+            continue
 
         if url_is_definitely_404(url):
             continue
 
-        if does_article_mention_rummer(content, title, description):
+        if snippet_matches_rummer:
             filtered.append(item)
             continue
 
