@@ -10,5 +10,5 @@ USER app_user
 # Expose the port for Flask application
 EXPOSE 5000
 
-# Start the Flask server
-CMD ["python", "server.py"]
+# Production WSGI (avoids Flask's built-in dev server warning and is suitable behind Docker)
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "server:app"]

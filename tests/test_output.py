@@ -30,6 +30,17 @@ def test_save_and_load_roundtrip():
         assert "last_fetched" in loaded
 
 
+def test_save_author_can_skip_last_fetched_bump():
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "author.json")
+        old = "2020-01-01T00:00:00"
+        author = {"name": "X", "publications": [], "last_fetched": old}
+        save_author(author, path, bump_last_fetched=False)
+        loaded = load_author(path)
+        assert loaded is not None
+        assert loaded["last_fetched"] == old
+
+
 def test_is_fresh_none():
     assert is_fresh(None, 3600) is False
 

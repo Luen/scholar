@@ -1,4 +1,5 @@
 flask
+gunicorn>=23.0.0
 scholarly
 gspread
 oauth2client

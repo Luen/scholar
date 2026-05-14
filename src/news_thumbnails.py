@@ -1,10 +1,10 @@
 """
-Download article cover images for news items missing thumbnails.
+Download news images for the API: remote ``image.url`` values from feeds/APIs are
+mirrored to disk; missing images use article **og:image** (etc.).
 
-Runs during ``main.py`` (cron). Stores files under
-``{SCHOLAR_DATA_DIR}/news_thumbnails/<scholar_id>/`` and sets each item's
+Stores files under ``{SCHOLAR_DATA_DIR}/news_thumbnails/<scholar_id>/`` and sets
 ``image.url`` to a public URL (see ``PUBLIC_API_BASE_URL``) or root-relative
-``/scholar/<id>/news/thumbnail/<filename>`` for the API to serve.
+``/scholar/<id>/news/thumbnail/<filename>`` — served by Flask.
 """
 
 from __future__ import annotations
@@ -116,6 +116,54 @@ def _find_existing_thumbnail(thumb_dir: Path, digest: str) -> Path | None:
     return None
 
 
+def _image_url_is_served_by_us(url: str, scholar_id: str) -> bool:
+    """True if ``url`` already points at our ``/scholar/<id>/news/thumbnail/...`` route."""
+    u = url.strip()
+    return f"/scholar/{scholar_id}/news/thumbnail/" in u
+
+
+def mirror_remote_item_image(scholar_id: str, item: dict[str, Any]) -> tuple[bool, bool]:
+    """
+    If ``item['image']['url']`` is a remote ``http(s)`` URL, download bytes to disk and
+    replace with our thumbnail URL. Skips when already proxied or non-http.
+
+    Returns ``(updated, should_throttle)`` (throttle after a remote fetch attempt).
+    """
+    img = item.get("image")
+    if not isinstance(img, dict):
+        return False, False
+    raw_url = (img.get("url") or "").strip()
+    if not raw_url.startswith(("http://", "https://")):
+        return False, False
+    if _image_url_is_served_by_us(raw_url, scholar_id):
+        return False, False
+
+    tdir = thumbnail_dir(scholar_id)
+    digest = url_hash(raw_url)
+    existing = _find_existing_thumbnail(tdir, digest)
+    if existing is not None:
+        img["url"] = thumbnail_image_public_url(scholar_id, existing.name)
+        return True, False
+
+    raw = _download_image_bytes(raw_url)
+    if not raw:
+        return False, True
+    sniffed = sniff_image_format(raw)
+    if not sniffed:
+        logger.debug("Mirrored source not a recognised image: %s", raw_url[:120])
+        return False, True
+    ext, _mime = sniffed
+    dest = tdir / f"{digest}.{ext}"
+    try:
+        dest.write_bytes(raw)
+    except OSError as e:
+        logger.warning("Could not write mirrored image %s: %s", dest, e)
+        return False, True
+
+    img["url"] = thumbnail_image_public_url(scholar_id, dest.name)
+    return True, True
+
+
 def _fetch_html_page(url: str, *, timeout_s: int = 18) -> str | None:
     """Return raw HTML for meta / og:image discovery."""
     try:
@@ -193,16 +241,22 @@ def _media_item_has_usable_image(item: dict[str, Any]) -> bool:
     return bool(u)
 
 
-def ensure_thumbnail_for_item(scholar_id: str, item: dict[str, Any]) -> bool:
+def ensure_thumbnail_for_item(scholar_id: str, item: dict[str, Any]) -> tuple[bool, bool]:
     """
     If item has an absolute article URL but no image, try og:image (etc.), download,
-    and set ``image`` to a local API path. Returns True if ``image`` was set/updated.
+    and set ``image`` to a public or API-relative URL.
+
+    Returns:
+        ``(updated, should_throttle)`` — ``updated`` is True if ``image`` was set.
+        ``should_throttle`` is True only after remote I/O (``_fetch_html_page`` and/or
+        ``_download_image_bytes``); skip when the item already had an image, had no URL,
+        or only reused a file already on disk (no HTML/image fetch).
     """
     if _media_item_has_usable_image(item):
-        return False
+        return False, False
     page_url = (item.get("url") or "").strip()
     if not page_url.startswith(("http://", "https://")):
-        return False
+        return False, False
 
     tdir = thumbnail_dir(scholar_id)
     digest = url_hash(page_url)
@@ -212,51 +266,54 @@ def ensure_thumbnail_for_item(scholar_id: str, item: dict[str, Any]) -> bool:
             "url": thumbnail_image_public_url(scholar_id, existing.name),
             "alt": strip_html((item.get("title") or "")[:500]),
         }
-        return True
+        return True, False
 
     html = _fetch_html_page(page_url)
     if not html:
-        return False
+        return False, True
     remote_image = extract_image_from_html(html, page_url)
     if not remote_image:
-        return False
+        return False, True
 
     raw = _download_image_bytes(remote_image)
     if not raw:
-        return False
+        return False, True
     sniffed = sniff_image_format(raw)
     if not sniffed:
         logger.debug("Not a recognised image format from %s", remote_image)
-        return False
+        return False, True
     ext, _mime = sniffed
     dest = tdir / f"{digest}.{ext}"
     try:
         dest.write_bytes(raw)
     except OSError as e:
         logger.warning("Could not write thumbnail %s: %s", dest, e)
-        return False
+        return False, True
 
     item["image"] = {
         "url": thumbnail_image_public_url(scholar_id, dest.name),
         "alt": strip_html((item.get("title") or "")[:500]),
     }
-    return True
+    return True, True
 
 
 def enrich_filtered_media_thumbnails(scholar_id: str, items: list[dict[str, Any]]) -> int:
     """
-    Populate missing thumbnails for filtered media. Returns count of items updated.
+    For each item: mirror remote ``image.url`` to disk (then serve via Flask), then
+    fill missing images from article **og:image** when needed.
     """
     updated = 0
     delay = _thumb_delay_seconds()
     for item in items:
         try:
-            if ensure_thumbnail_for_item(scholar_id, item):
+            m_changed, m_throttle = mirror_remote_item_image(scholar_id, item)
+            t_changed, t_throttle = ensure_thumbnail_for_item(scholar_id, item)
+            if m_changed or t_changed:
                 updated += 1
+            if delay and (m_throttle or t_throttle):
+                time.sleep(delay)
         except Exception as e:
             logger.warning("Thumbnail step failed for %s: %s", item.get("url"), e)
-        if delay:
-            time.sleep(delay)
     if updated:
         logger.info("News thumbnails: updated %d items for %s", updated, scholar_id)
     return updated

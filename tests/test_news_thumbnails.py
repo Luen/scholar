@@ -113,6 +113,50 @@ def test_news_thumbnail_route_rejects_bad_filename(tmp_path):
     assert res.status_code == 400
 
 
+def test_mirror_remote_downloads_and_rewrites_url(monkeypatch, tmp_path):
+    monkeypatch.setenv("SCHOLAR_DATA_DIR", str(tmp_path))
+    sid = "ynWS968AAAAJ"
+    img_url = "https://i.ytimg.com/vi/foo/hq720.jpg"
+    jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 200
+    monkeypatch.setattr(
+        nt,
+        "_download_image_bytes",
+        lambda u, timeout_s=25: jpeg if "ytimg.com" in u else None,
+    )
+    item = {"url": "https://youtube.com/x", "image": {"url": img_url, "alt": "Keep"}}
+    assert nt.mirror_remote_item_image(sid, item) == (True, True)
+    assert "/scholar/ynWS968AAAAJ/news/thumbnail/" in item["image"]["url"]
+    assert item["image"]["alt"] == "Keep"
+    digest = nt.url_hash(img_url)
+    assert (tmp_path / "news_thumbnails" / sid / f"{digest}.jpg").is_file()
+
+
+def test_mirror_remote_reuses_file_without_network(monkeypatch, tmp_path):
+    monkeypatch.setenv("SCHOLAR_DATA_DIR", str(tmp_path))
+    sid = "ynWS968AAAAJ"
+    img_url = "https://cdn.example/p.jpg"
+    digest = nt.url_hash(img_url)
+    tdir = tmp_path / "news_thumbnails" / sid
+    tdir.mkdir(parents=True)
+    (tdir / f"{digest}.jpg").write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 80)
+
+    def boom(*_a, **_k):
+        raise AssertionError("_download_image_bytes should not run when file exists")
+
+    monkeypatch.setattr(nt, "_download_image_bytes", boom)
+    item = {"image": {"url": img_url}}
+    assert nt.mirror_remote_item_image(sid, item) == (True, False)
+    assert digest in item["image"]["url"]
+
+
+def test_mirror_skips_already_proxied_url(tmp_path):
+    sid = "ynWS968AAAAJ"
+    u = f"/scholar/{sid}/news/thumbnail/{'b' * 64}.webp"
+    item = {"image": {"url": u}}
+    assert nt.mirror_remote_item_image(sid, item) == (False, False)
+    assert item["image"]["url"] == u
+
+
 def test_enrich_no_sleep_when_no_remote_io(monkeypatch, tmp_path):
     monkeypatch.setenv("SCHOLAR_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("NEWS_THUMB_FETCH_DELAY_SECONDS", "0.5")
@@ -120,7 +164,13 @@ def test_enrich_no_sleep_when_no_remote_io(monkeypatch, tmp_path):
     monkeypatch.setattr(nt.time, "sleep", lambda s: sleeps.append(s))
     items = [
         {"url": "", "title": "a"},
-        {"url": "https://x.test/a", "image": {"url": "https://cdn/z.jpg"}, "title": "b"},
+        {
+            "url": "https://x.test/a",
+            "image": {
+                "url": f"/scholar/ynWS968AAAAJ/news/thumbnail/{'a' * 64}.jpg",
+            },
+            "title": "b",
+        },
     ]
     assert nt.enrich_filtered_media_thumbnails("ynWS968AAAAJ", items) == 0
     assert sleeps == []

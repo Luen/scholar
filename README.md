@@ -41,14 +41,30 @@ See also [Zotera](https://www.zotero.org/), an [open source citation manager](ht
 
 The stack includes:
 
-- **web** – Flask API serving scholar data
+- **web** – Gunicorn + Flask API serving scholar data
 - **cron** – Runs the main scraper and DOI metrics revalidation on a schedule
 
-**Cron schedule** (in `cron/Dockerfile`): main scholar pipeline at 00:00 every 14 days; DOI metrics revalidation (Crossref / Altmetric / Google Scholar cache) at **02:00 daily**.
+**Cron schedule** (in `cron/Dockerfile`): full scholar pipeline (`python main.py <id>`) at **00:00 every 14 days**; DOI metrics revalidation at **02:00 daily**; **`--refresh-news`** (fetch RSS/APIs, then filter + thumbnails) at **05:00 daily**; **`--bake-media-filtered`** (recompute filters/thumbnails from on-disk `media` only) at **12:00 daily** — each for the three scholar IDs in that file.
 
 After each successful `main.py` run, the pipeline writes **`media_filtered`** (and `media_filtered_at`) into the same `scholar_data/<id>.json` file. The `/scholar/<id>/news` API **serves that list** when present, so it does not re-run per-URL Scrapling on every HTTP request. Older JSON files without `media_filtered` still filter on read until the next full fetch; for those, items whose **title/description already match** Dr Jodie Rummer (strict rules) are kept **without** fetching each URL, which avoids the long Scrapling bursts you see when only `media` exists.
 
-For filtered items that have **no** `image.url` from upstream APIs, `main.py` tries **og:image** / Twitter card images on the article page, saves bytes under `scholar_data/news_thumbnails/<scholar_id>/`, and sets `image.url` for the Flask route **`GET /scholar/<id>/news/thumbnail/<sha256>.<ext>`**. With **`PUBLIC_API_BASE_URL`** (e.g. `https://api.rummerlab.com`, set in `.env` and in `docker-compose.yml` for this stack), JSON stores **absolute** thumbnail URLs so rummerlab.com can use them directly. If unset, URLs are root-relative (`/scholar/...`). Optional env: `NEWS_THUMB_MAX_BYTES`, `NEWS_THUMB_FETCH_DELAY_SECONDS` (see `.env.template`). **Backfill:** og:image download runs only during `main.py` (not when `/news` is read). After deploy, run `main.py` once per scholar (or wait for cron) so `media_filtered` and thumbnails are written; ensure the same `scholar_data` volume is visible to both **cron** and **web** so image files exist where the API serves them.
+**Lightweight jobs (no Scholar scrape, `last_fetched` unchanged):**
+
+- **`--bake-media-filtered`** — recompute `media_filtered`, timestamps, and thumbnails from the existing `media` array on disk (e.g. after filter logic changes).
+
+```bash
+python main.py ynWS968AAAAJ --bake-media-filtered
+docker compose exec cron python main.py ynWS968AAAAJ --bake-media-filtered
+```
+
+- **`--refresh-news`** — fetch fresh news/media via RSS/APIs (`get_news_data`), then filter + thumbnails, then save.
+
+```bash
+python main.py ynWS968AAAAJ --refresh-news
+docker compose exec cron python main.py ynWS968AAAAJ --refresh-news
+```
+
+For items whose **`image.url`** is already a remote ``https://`` link from a feed or API (YouTube, Facebook, etc.), the same pipeline **downloads** it to `scholar_data/news_thumbnails/<scholar_id>/` and rewrites `image.url` to the Flask route **`GET /scholar/<id>/news/thumbnail/<sha256>.<ext>`** (hash of the **image** URL). For items with **no** `image.url`, **`main.py`** (full run, `--refresh-news`, or `--bake-media-filtered`) tries **og:image** / Twitter card images on the article page (hash of the **article** URL). With **`PUBLIC_API_BASE_URL`**, JSON can store absolute thumbnail URLs. Optional env: `NEWS_THUMB_MAX_BYTES`, `NEWS_THUMB_FETCH_DELAY_SECONDS` (see `.env.template`). **Backfill:** downloads run during those commands, not when `/news` is read. Ensure the same `scholar_data` volume is visible to both **cron** and **web** so image files exist where the API serves them.
 
 Build the base image first (web and cron use it; the base container exits immediately):
 
@@ -190,7 +206,7 @@ Neither phase uses `force_refresh`, so if a request is blocked you keep existing
 
 ## Project structure
 
-- `main.py` – Orchestration only: loads config, runs pipeline, handles idempotency
+- `main.py` – Full scrape, idempotency, **`--bake-media-filtered`**, **`--refresh-news`**
 - `src/scholar_fetcher.py` – Author, coauthors, publications from scholarly (with retries)
 - `src/doi_resolver.py` – DOI lookup and resolution (with retries)
 - `src/output.py` – Load/save JSON, `schema_version`, `last_fetched`, resume indices
@@ -223,15 +239,9 @@ Tests marked `integration` require network access. Tests that need `google-crede
 ruff check . && ruff format --check .
 ```
 
-## Starting the Flask server
+## Starting the API server
 
-Navigate to the project directory and run:
-
-```bash
-python server.py
-```
-
-Or with Docker:
+**Docker (production-style):** the `web` image starts **[Gunicorn](https://docs.gunicorn.org/)** (`server:app`), not Flask’s development server. Access logs and errors go to stdout/stderr for `docker compose logs`.
 
 ```bash
 docker compose up web cron -d --build
@@ -239,6 +249,12 @@ docker compose down; docker volume rm scholar_cache; docker compose up web cron 
 ```
 
 The API is available at `http://localhost:8000` (Docker maps 8000→5000).
+
+**Local development:** use Flask’s built-in server (handy for quick runs; do not use as production):
+
+```bash
+python server.py
+```
 
 ### API Endpoints
 

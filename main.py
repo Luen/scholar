@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Orchestrate scholar data fetch: author, coauthors, publications, DOI, impact factor, news, video."""
 
+import argparse
 import sys
 from datetime import datetime, timezone
+from typing import Any
 
 import src.cache_config  # noqa: F401 - configure HTTP cache before any requests
 from src.config import Config
@@ -100,6 +102,60 @@ def _enrich_publication(
             bib["impact_factor"] = ""
 
 
+def bake_media_filtered_fields(author: dict[str, Any], scholar_id: str) -> None:
+    """Set ``media_filtered``, ``media_filtered_at``, and news thumbnails from ``author['media']``."""
+    raw_media = author.get("media", []) or []
+    author["media_filtered"] = filter_media_items(raw_media)
+    author["media_filtered_at"] = datetime.now(timezone.utc).isoformat()
+    enrich_filtered_media_thumbnails(scholar_id, author["media_filtered"])
+
+
+def refresh_news_to_disk(config: Config) -> int:
+    """
+    Load scholar JSON, fetch fresh ``media`` via ``get_news_data``, then filter + thumbnails, save.
+
+    Does not bump ``last_fetched`` so the full Scholar scrape idempotency window is unchanged.
+    """
+    import logging
+
+    log = logging.getLogger(__name__)
+    author = load_author(config.output_path)
+    if not author:
+        log.error("No author JSON at %s", config.output_path)
+        return 1
+    name = (author.get("name") or "").strip()
+    if not name:
+        log.error("Author JSON at %s has no name; cannot refresh news", config.output_path)
+        return 1
+    log.info("Refreshing news/media for %s (%s)", config.scholar_id, name)
+    author.update(get_news_data(name))
+    bake_media_filtered_fields(author, config.scholar_id)
+    save_author(author, config.output_path, bump_last_fetched=False)
+    log.info("Wrote media + media_filtered for %s", config.output_path)
+    return 0
+
+
+def bake_media_filtered_to_disk(config: Config) -> int:
+    """
+    Load scholar JSON from disk, recompute ``media_filtered`` (+ thumbnails), save.
+
+    Does not refresh ``last_fetched`` so a full scrape is not suppressed by this run.
+    """
+    import logging
+
+    log = logging.getLogger(__name__)
+    author = load_author(config.output_path)
+    if not author:
+        log.error("No author JSON at %s", config.output_path)
+        return 1
+    n = len(author.get("media", []) or [])
+    log.info("Baking media_filtered from %d on-disk media rows for %s", n, config.scholar_id)
+    bake_media_filtered_fields(author, config.scholar_id)
+    save_author(author, config.output_path, bump_last_fetched=False)
+    log.info("Wrote media_filtered to %s", config.output_path)
+    return 0
+
+
 def run(scholar_id: str, config: Config | None = None) -> int:
     """Run the full scholar fetch pipeline. Returns exit code."""
     import logging
@@ -161,9 +217,7 @@ def run(scholar_id: str, config: Config | None = None) -> int:
     author.update(get_news_data(author.get("name", "")))
     raw_media = author.get("media", []) or []
     log.info("Filtering %d media items for API (writes media_filtered)", len(raw_media))
-    author["media_filtered"] = filter_media_items(raw_media)
-    author["media_filtered_at"] = datetime.now(timezone.utc).isoformat()
-    enrich_filtered_media_thumbnails(config.scholar_id, author["media_filtered"])
+    bake_media_filtered_fields(author, config.scholar_id)
 
     log.info("Fetching video data")
     author.update(get_video_data(author.get("name", "")))
@@ -175,12 +229,28 @@ def run(scholar_id: str, config: Config | None = None) -> int:
 
 def main() -> None:
     setup_logging()
-    if len(sys.argv) != 2:
-        print("Usage: python main.py scholar_id\nExample: python main.py ynWS968AAAAJ")
-        sys.exit(1)
-    scholar_id = sys.argv[1]
-    config = Config(scholar_id=scholar_id)
-    sys.exit(run(scholar_id, config))
+    p = argparse.ArgumentParser(
+        description="Full scholar scrape, refresh news only, or bake media_filtered from disk.",
+    )
+    p.add_argument("scholar_id", help="Google Scholar author ID (e.g. ynWS968AAAAJ)")
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--bake-media-filtered",
+        action="store_true",
+        help="Recompute media_filtered and thumbnails from on-disk media only; skip news fetch.",
+    )
+    mode.add_argument(
+        "--refresh-news",
+        action="store_true",
+        help="Fetch fresh news/media (RSS/APIs), then filter + thumbnails; skip Scholar scrape.",
+    )
+    args = p.parse_args()
+    config = Config(scholar_id=args.scholar_id)
+    if args.bake_media_filtered:
+        sys.exit(bake_media_filtered_to_disk(config))
+    if args.refresh_news:
+        sys.exit(refresh_news_to_disk(config))
+    sys.exit(run(args.scholar_id, config))
 
 
 if __name__ == "__main__":

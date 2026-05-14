@@ -14,6 +14,7 @@ from src.serve import app
 setup_logging(level=os.environ.get("LOG_LEVEL", "INFO"))
 
 if __name__ == "__main__":
+    # Local development only. Docker `web` image runs Gunicorn (see `web/Dockerfile`).
     host = os.environ.get("FLASK_HOST", "0.0.0.0")
     port = int(os.environ.get("FLASK_PORT", "5000"))
     debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
