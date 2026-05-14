@@ -17,11 +17,11 @@ from common import PROJECT_ROOT, setup_script  # noqa: E402
 setup_script()
 
 from src.doi_utils import normalize_doi  # noqa: E402
-from src.scholar_citations import CACHE_DIR  # noqa: E402
-
-
-def _normalize_doi_for_cache(doi: str) -> str:
-    return doi.replace("/", "_").replace(":", "_").strip()
+from src.scholar_citations import (  # noqa: E402
+    CACHE_DIR,
+    _doi_from_cache_file_or_name,
+    _listdir_cache_json_path,
+)
 
 
 def main() -> int:
@@ -75,17 +75,23 @@ def main() -> int:
     # DOI metrics cache (scholar_*.json, altmetric_*.json, crossref_*.json)
     removed_from_cache = 0
     if os.path.isdir(CACHE_DIR):
-        for doi in to_remove:
-            safe = _normalize_doi_for_cache(doi)
-            for prefix in ("scholar", "altmetric", "crossref"):
-                p = os.path.join(CACHE_DIR, f"{prefix}_{safe}.json")
-                if os.path.isfile(p):
-                    try:
-                        os.remove(p)
-                        removed_from_cache += 1
-                        print(f"  removed cache: {os.path.basename(p)}")
-                    except OSError as e:
-                        print(f"  failed to remove {p}: {e}", file=sys.stderr)
+        for name in os.listdir(CACHE_DIR):
+            if not (
+                name.startswith(("scholar_", "altmetric_", "crossref_")) and name.endswith(".json")
+            ):
+                continue
+            p = _listdir_cache_json_path(name)
+            if p is None:
+                continue
+            prefix = name.split("_", 1)[0]
+            if _doi_from_cache_file_or_name(p, name, prefix) not in to_remove:
+                continue
+            try:
+                p.unlink()
+                removed_from_cache += 1
+                print(f"  removed cache: {p.name}")
+            except OSError as e:
+                print(f"  failed to remove {p}: {e}", file=sys.stderr)
 
     print(
         f"Done: {removed_from_data} publication(s) removed from data, {removed_from_cache} cache file(s) removed."

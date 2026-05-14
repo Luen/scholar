@@ -13,7 +13,7 @@ import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import requests
 import requests.adapters
@@ -90,8 +90,10 @@ def _doi_metrics_cache_root() -> Path:
     return Path(CACHE_DIR).resolve()
 
 
+_CACHE_SAFE_STEM_PATTERN = r"[A-Za-z0-9_.%~()+,;-]+"
+_CACHE_SAFE_STEM_RE = re.compile(rf"^{_CACHE_SAFE_STEM_PATTERN}$")
 _CACHE_JSON_BASENAME_RE = re.compile(
-    r"^(?P<prefix>crossref|scholar|altmetric)_(?P<safe>[A-Za-z0-9_.-]+)\.json$"
+    rf"^(?P<prefix>crossref|scholar|altmetric)_(?P<safe>{_CACHE_SAFE_STEM_PATTERN})\.json$"
 )
 _ALLOWED_CACHE_PREFIX = frozenset({"crossref", "scholar", "altmetric"})
 
@@ -102,7 +104,7 @@ def _doi_metrics_cache_file(doi: str, prefix: str) -> Path | None:
         return None
     doi_n = normalize_doi(doi)
     safe = _normalize_doi_for_cache(doi_n)
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+", safe):
+    if not _CACHE_SAFE_STEM_RE.fullmatch(safe):
         return None
     name = f"{prefix}_{safe}.json"
     if not _CACHE_JSON_BASENAME_RE.match(name):
@@ -131,8 +133,35 @@ def _listdir_cache_json_path(name: str) -> Path | None:
 
 
 def _normalize_doi_for_cache(doi: str) -> str:
-    """Safe filename from DOI. Expects already-normalized DOI."""
-    return doi.replace("/", "_").replace(":", "_").strip()
+    """Safe filename stem from DOI while preserving legacy simple filenames."""
+    legacy_stem = normalize_doi(doi).replace("/", "_").replace(":", "_").strip()
+    return quote(
+        legacy_stem,
+        safe="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-",
+    )
+
+
+def _doi_from_cache_filename(name: str, expected_prefix: str) -> str | None:
+    """Best-effort DOI recovery from cache filename for legacy or invalid JSON cache entries."""
+    match = _CACHE_JSON_BASENAME_RE.match(name)
+    if not match or match.group("prefix") != expected_prefix:
+        return None
+    stem = unquote(match.group("safe"))
+    doi = stem.replace("_", "/")
+    return normalize_doi(doi) if doi else None
+
+
+def _doi_from_cache_file_or_name(path: Path, name: str, expected_prefix: str) -> str | None:
+    """Read DOI from cache JSON, falling back to the legacy filename encoding."""
+    try:
+        with path.open(encoding="utf-8") as f:
+            data = json.load(f)
+        doi = data.get("doi")
+        if isinstance(doi, str) and doi.strip():
+            return normalize_doi(doi)
+    except (json.JSONDecodeError, OSError):
+        pass
+    return _doi_from_cache_filename(name, expected_prefix)
 
 
 def _authors_contain_allowed(
@@ -201,11 +230,12 @@ def list_cached_dois_with_scholar_cache() -> set[str]:
     for name in os.listdir(CACHE_DIR):
         if not name.startswith(prefix) or not name.endswith(".json"):
             continue
-        # Reverse _normalize_doi_for_cache: safe was doi.replace("/", "_").replace(":", "_")
-        safe = name[len(prefix) : -len(".json")]
-        doi = safe.replace("_", "/")
+        p = _listdir_cache_json_path(name)
+        if p is None:
+            continue
+        doi = _doi_from_cache_file_or_name(p, name, "scholar")
         if doi:
-            dois.add(normalize_doi(doi))
+            dois.add(doi)
     return dois
 
 
