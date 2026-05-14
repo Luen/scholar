@@ -65,6 +65,20 @@ def _load_scholar_data_or_error(scholar_id: str):
         return None, ({"error": "Invalid scholar data"}, 500)
 
 
+def _served_media_items(author: dict) -> list[dict]:
+    """
+    Return media rows for the public /news API.
+
+    Prefer ``media_filtered`` written by ``main.py`` after ``filter_media_items`` so
+    HTTP requests do not re-run URL checks on every API call. Legacy JSON without that
+    key falls back to filtering ``media`` on read.
+    """
+    precooked = author.get("media_filtered")
+    if isinstance(precooked, list):
+        return precooked
+    return filter_media_items(author.get("media", []) or [])
+
+
 def _parse_pagination_args(
     default_limit: int = 50, max_limit: int = 200
 ) -> tuple[int, int] | tuple[None, dict]:
@@ -167,21 +181,23 @@ def get_scholar_news(id):
         body, status = err
         return jsonify(body), status
 
-    items = filter_media_items(data.get("media", []) or [])
+    items = _served_media_items(data)
     page = _parse_pagination_args(default_limit=25, max_limit=200)
     if page[0] is None:
         return jsonify(page[1]), 400
     limit, offset = page
     sliced = items[offset : offset + limit]
-    return jsonify(
-        {
-            "id": id,
-            "total": len(items),
-            "limit": limit,
-            "offset": offset,
-            "media": sliced,
-        }
-    )
+    body: dict = {
+        "id": id,
+        "total": len(items),
+        "limit": limit,
+        "offset": offset,
+        "media": sliced,
+    }
+    fat = data.get("media_filtered_at")
+    if isinstance(fat, str) and fat.strip():
+        body["filtered_at"] = fat.strip()
+    return jsonify(body)
 
 
 @app.route("/scholar/<id>/gscholar", methods=["GET"])

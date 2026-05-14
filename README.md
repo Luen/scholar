@@ -46,6 +46,8 @@ The stack includes:
 
 **Cron schedule** (in `cron/Dockerfile`): main scholar pipeline at 00:00 every 14 days; DOI metrics revalidation (Crossref / Altmetric / Google Scholar cache) at **02:00 daily**.
 
+After each successful `main.py` run, the pipeline writes **`media_filtered`** (and `media_filtered_at`) into the same `scholar_data/<id>.json` file. The `/scholar/<id>/news` API **serves that list** when present, so it does not re-run per-URL Scrapling on every HTTP request. Older JSON files without `media_filtered` still filter on read until the next full fetch.
+
 Build the base image first (web and cron use it; the base container exits immediately):
 
 ```bash

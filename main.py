@@ -2,12 +2,14 @@
 """Orchestrate scholar data fetch: author, coauthors, publications, DOI, impact factor, news, video."""
 
 import sys
+from datetime import datetime, timezone
 
 import src.cache_config  # noqa: F401 - configure HTTP cache before any requests
 from src.config import Config
 from src.doi_resolver import resolve_doi_for_publication
 from src.journal_impact_factor import add_impact_factor, load_impact_factor
 from src.logging_config import setup_logging
+from src.news_filters import filter_media_items
 from src.news_scraper import get_news_data
 from src.output import is_fresh, load_author, save_author, set_last_successful_index
 from src.scholar_fetcher import fetch_full_author
@@ -156,6 +158,10 @@ def run(scholar_id: str, config: Config | None = None) -> int:
 
     log.info("Fetching news/RSS for %s", author.get("name"))
     author.update(get_news_data(author.get("name", "")))
+    raw_media = author.get("media", []) or []
+    log.info("Filtering %d media items for API (writes media_filtered)", len(raw_media))
+    author["media_filtered"] = filter_media_items(raw_media)
+    author["media_filtered_at"] = datetime.now(timezone.utc).isoformat()
 
     log.info("Fetching video data")
     author.update(get_video_data(author.get("name", "")))
