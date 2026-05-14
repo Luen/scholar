@@ -135,6 +135,40 @@ def refresh_news_to_disk(config: Config) -> int:
     return 0
 
 
+def _refresh_cached_news_artifacts(
+    author: dict[str, Any], scholar_id: str, output_path: str
+) -> bool:
+    """
+    When a full scrape is skipped (fresh ``last_fetched``), still backfill derived news
+    fields: missing ``media_filtered``, thumbnail downloads, and managed URL rewrites.
+
+    Does not bump ``last_fetched``.
+    """
+    import logging
+
+    log = logging.getLogger(__name__)
+    changed = False
+
+    raw_media = author.get("media")
+    if not isinstance(raw_media, list):
+        raw_media = []
+
+    if not isinstance(author.get("media_filtered"), list):
+        log.info("Backfilling media_filtered from cached media (%s)", output_path)
+        author["media_filtered"] = filter_media_items(raw_media)
+        author["media_filtered_at"] = datetime.now(timezone.utc).isoformat()
+        changed = True
+
+    n = enrich_filtered_media_thumbnails(scholar_id, author["media_filtered"])
+    if n > 0:
+        changed = True
+
+    if changed:
+        save_author(author, output_path, bump_last_fetched=False)
+        log.info("Updated cached news artifacts in %s", output_path)
+    return changed
+
+
 def bake_media_filtered_to_disk(config: Config) -> int:
     """
     Load scholar JSON from disk, recompute ``media_filtered`` (+ thumbnails), save.
@@ -176,6 +210,8 @@ def run(scholar_id: str, config: Config | None = None) -> int:
             "Data is fresh (within %ds). Skipping fetch.",
             config.fresh_data_seconds,
         )
+        if previous:
+            _refresh_cached_news_artifacts(previous, scholar_id, config.output_path)
         return 0
 
     log.info("Fetching author profile (may encounter CAPTCHA in Docker)")

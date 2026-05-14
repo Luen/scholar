@@ -20,6 +20,30 @@ def test_thumbnail_image_public_url_strips_trailing_slash(monkeypatch):
     assert u == "https://api.rummerlab.com/scholar/ynWS968AAAAJ/news/thumbnail/a.webp"
 
 
+def test_enrich_normalizes_managed_thumbnail_to_configured_base(monkeypatch, tmp_path):
+    monkeypatch.setenv("SCHOLAR_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PUBLIC_API_BASE_URL", "https://api.example.com")
+    sid = "ynWS968AAAAJ"
+    h = "a" * 64
+    old = f"http://localhost:8000/scholar/{sid}/news/thumbnail/{h}.jpg"
+    items = [{"url": "", "title": "x", "image": {"url": old}}]
+    assert nt.enrich_filtered_media_thumbnails(sid, items) == 1
+    assert (
+        items[0]["image"]["url"] == f"https://api.example.com/scholar/{sid}/news/thumbnail/{h}.jpg"
+    )
+
+
+def test_enrich_normalizes_managed_thumbnail_to_root_relative(monkeypatch, tmp_path):
+    monkeypatch.delenv("PUBLIC_API_BASE_URL", raising=False)
+    monkeypatch.setenv("SCHOLAR_DATA_DIR", str(tmp_path))
+    sid = "ynWS968AAAAJ"
+    h = "b" * 64
+    old = f"https://wrong.host/scholar/{sid}/news/thumbnail/{h}.webp"
+    items = [{"url": "", "title": "x", "image": {"url": old}}]
+    assert nt.enrich_filtered_media_thumbnails(sid, items) == 1
+    assert items[0]["image"]["url"] == f"/scholar/{sid}/news/thumbnail/{h}.webp"
+
+
 def test_sniff_image_format():
     assert nt.sniff_image_format(b"\xff\xd8\xff" + b"\x00" * 20) == ("jpg", "image/jpeg")
     assert nt.sniff_image_format(b"\x89PNG\r\n\x1a\n" + b"\x00" * 20) == ("png", "image/png")

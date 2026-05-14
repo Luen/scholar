@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -114,6 +115,46 @@ def _find_existing_thumbnail(thumb_dir: Path, digest: str) -> Path | None:
         if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".gif", ".webp") and p.is_file():
             return p
     return None
+
+
+_THUMB_FILENAME_RE = re.compile(r"^[0-9a-f]{64}\.(?:jpg|jpeg|png|gif|webp)$", re.IGNORECASE)
+
+
+def managed_thumbnail_filename_from_url(scholar_id: str, url: str) -> str | None:
+    """If ``url`` is our proxied thumbnail route, return the ``<sha>.<ext>`` filename."""
+    u = url.strip()
+    needle = f"/scholar/{scholar_id}/news/thumbnail/"
+    idx = u.find(needle)
+    if idx == -1:
+        return None
+    rest = u[idx + len(needle) :].split("?")[0].split("#")[0]
+    if not _THUMB_FILENAME_RE.match(rest):
+        return None
+    return rest
+
+
+def normalize_managed_thumbnail_public_urls(scholar_id: str, items: list[dict[str, Any]]) -> int:
+    """
+    Rewrite proxied ``image.url`` values to match ``PUBLIC_API_BASE_URL`` (or root-relative).
+
+    Leaves third-party image URLs unchanged.
+    """
+    changed = 0
+    for item in items:
+        img = item.get("image")
+        if not isinstance(img, dict):
+            continue
+        raw = (img.get("url") or "").strip()
+        if not raw:
+            continue
+        fn = managed_thumbnail_filename_from_url(scholar_id, raw)
+        if not fn:
+            continue
+        new_u = thumbnail_image_public_url(scholar_id, fn)
+        if new_u != raw:
+            img["url"] = new_u
+            changed += 1
+    return changed
 
 
 def _image_url_is_served_by_us(url: str, scholar_id: str) -> bool:
@@ -302,7 +343,7 @@ def enrich_filtered_media_thumbnails(scholar_id: str, items: list[dict[str, Any]
     For each item: mirror remote ``image.url`` to disk (then serve via Flask), then
     fill missing images from article **og:image** when needed.
     """
-    updated = 0
+    updated = normalize_managed_thumbnail_public_urls(scholar_id, items)
     delay = _thumb_delay_seconds()
     for item in items:
         try:
