@@ -1,5 +1,6 @@
 import logging
-import os
+from pathlib import Path
+from typing import Optional, Protocol, Union
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -12,38 +13,52 @@ _SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/a
 _SHEET_URL = (
     "https://docs.google.com/spreadsheets/d/1lP75APkxXAgT8aobV4UjTR51BpX9Ee0wgYA7tTd-zrM/edit?gid=0"
 )
-
-# ``None`` = not yet tried; ``False`` = unavailable (missing creds or error); else worksheet.
-_worksheet: object | None = None
+_CREDENTIALS_PATH = Path("google-credentials.json")
 
 
-def _get_worksheet():
+class Worksheet(Protocol):
+    """Subset of the Google worksheet API used by this module."""
+
+    def col_values(self, col: int) -> list[object]: ...
+
+    def append_row(self, values: list[str]) -> object: ...
+
+
+class UnavailableWorksheet:
+    """Sentinel used after a failed worksheet initialization attempt."""
+
+
+_UNAVAILABLE_WORKSHEET = UnavailableWorksheet()
+_WorksheetCache = Union[Worksheet, UnavailableWorksheet, None]
+_worksheet: _WorksheetCache = None
+
+
+def _get_worksheet() -> Optional[Worksheet]:
     """Return the first worksheet, or ``None`` if credentials/sheet are unavailable."""
     global _worksheet
-    if _worksheet is False:
+    if isinstance(_worksheet, UnavailableWorksheet):
         return None
     if _worksheet is not None:
         return _worksheet
 
-    cred_path = "./google-credentials.json"
-    if not os.path.exists(cred_path):
+    if not _CREDENTIALS_PATH.exists():
         print_error("google-credentials.json file not found")
-        _worksheet = False
+        _worksheet = _UNAVAILABLE_WORKSHEET
         return None
 
     try:
-        creds = ServiceAccountCredentials.from_json_keyfile_name(cred_path, _SCOPE)
+        creds = ServiceAccountCredentials.from_json_keyfile_name(str(_CREDENTIALS_PATH), _SCOPE)
         client = gspread.authorize(creds)
         _worksheet = client.open_by_url(_SHEET_URL).sheet1
     except Exception as e:
         logger.warning("Journal impact factor sheet unavailable: %s", e)
-        _worksheet = False
+        _worksheet = _UNAVAILABLE_WORKSHEET
         return None
 
     return _worksheet
 
 
-def load_impact_factor():
+def load_impact_factor() -> dict[str, str]:
     """
     Load the impact factor data from the Google Sheet and return it as a dictionary with lowercase keys.
     """
@@ -61,15 +76,15 @@ def load_impact_factor():
 
     # Create a dictionary with lowercase journal names as keys
     impact_factor_data = {
-        journal_name.lower(): impact_factor
+        str(journal_name).strip().lower(): "" if impact_factor is None else str(impact_factor)
         for journal_name, impact_factor in zip(journal_names, impact_factors)
-        if journal_name
+        if journal_name and str(journal_name).strip()
     }
 
     return impact_factor_data
 
 
-def add_impact_factor(journal_name, impact_factor):
+def add_impact_factor(journal_name: str, impact_factor: str) -> None:
     """
     Add a new journal name and impact factor to the Google Sheet.
     """

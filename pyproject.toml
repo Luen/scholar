@@ -11,6 +11,7 @@ addopts = "-v --tb=short"
 filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning"]
 markers = [
     "integration: tests that need network, browser, or external services (excluded in CI)",
+    "credentials: tests that require google-credentials.json",
 ]
 
 [tool.ruff]
