@@ -83,6 +83,12 @@ docker compose up -d
 # or, to (re)build everything: docker compose build base && docker compose up -d --build
 ```
 
+**Typical home-server update** after pulling code (rebuild containers, recompute news filters for the default scholar ID, then follow logs; `Ctrl+C` stops log follow only):
+
+```bash
+git pull; docker compose up -d --build; docker compose exec cron python -u main.py ynWS968AAAAJ --bake-media-filtered; docker compose logs -f
+```
+
 For browser-based DOI fetching on sites that block plain HTTP, the project uses [Scrapling](https://github.com/D4Vinci/Scrapling). Install browser dependencies with `scrapling install` if you use that path. News aggregation uses RSS, [NewsAPI](https://newsapi.org/), the Guardian API, [Newspaper4k](https://github.com/AndyTheFactory/newspaper4k), and other sources.
 
 ### Caching

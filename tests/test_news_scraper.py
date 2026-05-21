@@ -4,6 +4,7 @@ from src.news_scraper import (
     CUSTOM_MEDIA_ADDITIONS,
     does_article_mention_keywords,
     does_article_mention_rummer,
+    url_is_excluded_own_site,
 )
 
 
@@ -20,6 +21,28 @@ def test_custom_media_additions_structure():
         if item["url"]:
             assert item["url"] not in seen_urls, f"Duplicate URL: {item['url']}"
             seen_urls.add(item["url"])
+
+
+def test_url_is_excluded_own_site():
+    assert url_is_excluded_own_site("https://rummerlab.com/about")
+    assert url_is_excluded_own_site("https://www.jodierummer.com/news/post")
+    assert url_is_excluded_own_site("https://physioshark.org/research")
+    assert url_is_excluded_own_site("https://blog.rummerlab.com/article")
+    assert url_is_excluded_own_site("https://www.facebook.com/jodie.rummer/")
+    assert url_is_excluded_own_site("https://au.linkedin.com/in/jodie-rummer-486a9556")
+    assert url_is_excluded_own_site("https://x.com/physiologyfish")
+    assert url_is_excluded_own_site("http://portfolio.jcu.edu.au/researchers/jodie.rummer/")
+    assert url_is_excluded_own_site("https://www.instagram.com/rummerjodie/?hl=en")
+    assert url_is_excluded_own_site("https://www.facebook.com/physioshark/")
+    assert url_is_excluded_own_site("https://www.facebook.com/rummerlab/")
+    assert url_is_excluded_own_site("https://www.instagram.com/physioshark/")
+    assert url_is_excluded_own_site("https://www.instagram.com/rummerlab/")
+    assert url_is_excluded_own_site(
+        "https://www.facebook.com/physioshark/posts/remember-gail-schwieterman-our-visiting-scientist-from-last-season-since-leaving/582888185569924/"
+    )
+    assert not url_is_excluded_own_site("https://www.abc.net.au/news/2026-01-16/example")
+    assert not url_is_excluded_own_site("https://www.facebook.com/someotherpage/posts/123")
+    assert not url_is_excluded_own_site("")
 
 
 def test_custom_media_includes_expected_sources():

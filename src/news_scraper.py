@@ -65,6 +65,64 @@ TAG_PHRASES_FOR_KEYWORDS = [
     "Physiologyfish",
 ]
 
+# Own-site hosts: drop from aggregated news/search results (external coverage only).
+EXCLUDED_OWN_SITE_HOST_SUFFIXES = (
+    "rummerlab.com",
+    "jodierummer.com",
+    "physioshark.org",
+)
+
+# Lab/personal social profiles and JCU portfolio (not third-party news articles).
+_FACEBOOK_PAGE_SLUGS = frozenset({"jodie.rummer", "physioshark", "rummerlab"})
+_INSTAGRAM_PROFILE_SLUGS = frozenset({"rummerjodie", "physioshark", "rummerlab"})
+_X_PROFILE_SLUGS = frozenset({"physiologyfish"})
+_LINKEDIN_PROFILE_PREFIX = "/in/jodie-rummer"
+_JCU_PORTFOLIO_PATH_PREFIX = "/researchers/jodie.rummer"
+
+
+def _url_first_path_segment(path: str) -> str:
+    segment = (path or "").strip("/").split("/", 1)[0].lower()
+    return segment
+
+
+def _url_is_excluded_social_or_profile(host: str, path: str) -> bool:
+    if host in ("facebook.com", "www.facebook.com", "m.facebook.com", "web.facebook.com"):
+        return _url_first_path_segment(path) in _FACEBOOK_PAGE_SLUGS
+    if host in ("instagram.com", "www.instagram.com"):
+        return _url_first_path_segment(path) in _INSTAGRAM_PROFILE_SLUGS
+    if host.endswith("linkedin.com"):
+        path_lower = (path or "").lower()
+        return path_lower.startswith(_LINKEDIN_PROFILE_PREFIX)
+    if host in ("x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com"):
+        return _url_first_path_segment(path) in _X_PROFILE_SLUGS
+    if host == "portfolio.jcu.edu.au":
+        return (path or "").lower().startswith(_JCU_PORTFOLIO_PATH_PREFIX)
+    return False
+
+
+def url_is_excluded_own_site(url: str) -> bool:
+    """
+    True for lab/personal sites, social profiles, and JCU portfolio pages.
+
+    External news articles (even on facebook.com elsewhere) are not excluded.
+    """
+    if not url or not (url.startswith("http://") or url.startswith("https://")):
+        return False
+    try:
+        parsed = urlparse(url.strip())
+        host = (parsed.hostname or "").lower().rstrip(".")
+        path = parsed.path or ""
+    except ValueError:
+        return False
+    if not host:
+        return False
+    if any(
+        host == suffix or host.endswith(f".{suffix}") for suffix in EXCLUDED_OWN_SITE_HOST_SUFFIXES
+    ):
+        return True
+    return _url_is_excluded_social_or_profile(host, path)
+
+
 # Exclude articles about Kirstein Rummery (different person)
 EXCLUDE_KEYWORDS = [
     "kirstein rummery",
@@ -1164,6 +1222,8 @@ def fetch_all_news() -> list[MediaItem]:
     article_by_title: dict[str, MediaItem] = {}
     for article in all_articles:
         url = article["url"]
+        if url_is_excluded_own_site(url):
+            continue
         title = article["title"]
         src = article["source"]
         priority = source_priorities.get(src, default_priority)

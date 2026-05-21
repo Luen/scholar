@@ -276,7 +276,7 @@ def filter_media_items(items: list[dict]) -> list[dict]:
     - keep items without an absolute URL
     """
     # Local import: news_scraper pulls optional deps; only needed when filtering URLs.
-    from src.news_scraper import does_article_mention_rummer
+    from src.news_scraper import does_article_mention_rummer, url_is_excluded_own_site
 
     filtered: list[dict] = []
     for item in items:
@@ -284,6 +284,9 @@ def filter_media_items(items: list[dict]) -> list[dict]:
         # Keep items without an absolute URL (e.g. curated/in-site items).
         if not url or not (url.startswith("http://") or url.startswith("https://")):
             filtered.append(item)
+            continue
+
+        if url_is_excluded_own_site(url):
             continue
 
         title = (item.get("title") or "").strip()

@@ -125,6 +125,55 @@ def test_news_filters_keep_on_network_errors(monkeypatch, tmp_path):
     assert scrapling_calls == ["https://example.test/flaky"]
 
 
+def test_news_filters_exclude_own_site_urls(monkeypatch, tmp_path):
+    from src import news_filters, serve
+
+    serve.SCHOLAR_DATA_DIR_ABS = str(tmp_path)
+    news_filters.clear_caches()
+
+    scholar_id = "ynWS968AAAAJ"
+    media = [
+        {
+            "title": "Lab homepage",
+            "description": "Professor Jodie Rummer leads RummerLab research.",
+            "url": "https://rummerlab.com/",
+        },
+        {
+            "title": "Personal site",
+            "url": "https://www.jodierummer.com/media",
+        },
+        {
+            "title": "Physioshark project",
+            "url": "https://physioshark.org/about",
+        },
+        {
+            "title": "Facebook profile",
+            "url": "https://www.facebook.com/jodie.rummer/",
+        },
+        {
+            "title": "External coverage",
+            "description": "Professor Jodie Rummer from James Cook University.",
+            "url": "https://example.test/external",
+        },
+    ]
+    _write_scholar(tmp_path, scholar_id, media)
+
+    def fake_head(url, *args, **kwargs):
+        return _FakeResp(status_code=200)
+
+    def fake_scrapling_fetch(url: str, *, timeout_s: int = 8):
+        return 200, "text/html; charset=utf-8", "<html><body>rummerlab</body></html>".lower()
+
+    monkeypatch.setattr(news_filters.requests, "head", fake_head)
+    monkeypatch.setattr(news_filters, "_scrapling_fetch_html_prefix", fake_scrapling_fetch)
+
+    c = serve.app.test_client()
+    res = c.get(f"/scholar/{scholar_id}/news?limit=50")
+    assert res.status_code == 200
+    assert len(res.json["media"]) == 1
+    assert res.json["media"][0]["url"] == "https://example.test/external"
+
+
 def test_news_filters_drop_google_search_without_rummer_in_snippet(monkeypatch, tmp_path):
     """Google Search rows with only generic JCU/marine text must not hit Scrapling."""
     from src import news_filters, serve
