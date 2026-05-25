@@ -208,6 +208,17 @@ CUSTOM_MEDIA_ADDITIONS: list[MediaItem] = [
     },
     {
         "type": "article",
+        "source": "Cairns Post",
+        "title": "Far North Qld shark attack victim at Hull Heads identified as Michael Jensz",
+        "description": "Professor Jodie Rummer said shark management needs to be evidence-based, not driven by fear or retaliation, after the fatal Hull Heads shark attack.",
+        "url": "https://www.cairnspost.com.au/news/cassowary-coast/far-north-qld-shark-attack-victim-at-hull-heads-identified-as-michael-jensz/news-story/17a46d4315b000c949c1a45c73b14bbf?btr=e37276b29ff7a5945234d77f59479070&giftid=rFuQ7PdFn7",
+        "date": "2026-05-25T00:00:00Z",
+        "sourceType": "Other",
+        "image": None,
+        "keywords": ["custom"],
+    },
+    {
+        "type": "article",
         "source": "Discover Wildlife",
         "title": "Walking sharks found off Australian coast",
         "description": '"Walking sharks" found off Australian coast. A closer look reveals extraordinary new discovery about epaulette shark reproduction.',
