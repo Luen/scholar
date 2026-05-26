@@ -54,6 +54,19 @@ def test_custom_media_includes_expected_sources():
     assert "ABC News" in sources
 
 
+def test_custom_media_includes_may_2026_shark_attack_coverage():
+    """Custom additions include the curated May 2026 shark-attack coverage URLs."""
+    urls = {a["url"] for a in CUSTOM_MEDIA_ADDITIONS}
+    assert (
+        "https://www.news.com.au/travel/travel-updates/incidents/bob-katter-calls-for-shark-culling-after-horror-attack-leaves-cairns-spearfisherman-dead/news-story/56ecba20db4aacb882e84930e8df0d33"
+        in urls
+    )
+    assert (
+        "https://www.abc.net.au/news/2026-05-25/queensland-spearfisher-shark-attack-victim-identified/106718104"
+        in urls
+    )
+
+
 def test_does_article_mention_rummer_accepts_name_and_lab():
     assert does_article_mention_rummer(
         "",
