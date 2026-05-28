@@ -60,10 +60,13 @@ def test_url_is_excluded_own_site():
     assert url_is_excluded_own_site("https://x.com/physiologyfish")
     assert url_is_excluded_own_site("http://portfolio.jcu.edu.au/researchers/jodie.rummer/")
     assert url_is_excluded_own_site("https://www.instagram.com/rummerjodie/?hl=en")
+    assert url_is_excluded_own_site("https://m.instagram.com/rummerlab/")
     assert url_is_excluded_own_site("https://www.facebook.com/physioshark/")
     assert url_is_excluded_own_site("https://www.facebook.com/rummerlab/")
     assert url_is_excluded_own_site("https://www.instagram.com/physioshark/")
     assert url_is_excluded_own_site("https://www.instagram.com/rummerlab/")
+    assert url_is_excluded_own_site("https://x.com/rummerlab")
+    assert url_is_excluded_own_site("https://twitter.com/physioshark")
     assert url_is_excluded_own_site(
         "https://www.facebook.com/physioshark/posts/remember-gail-schwieterman-our-visiting-scientist-from-last-season-since-leaving/582888185569924/"
     )
