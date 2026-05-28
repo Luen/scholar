@@ -190,7 +190,7 @@ class MediaItem(TypedDict):
     keywords: Optional[list[str]]
 
 
-# Manual/custom media additions (curated, always included; deduped by URL or title)
+# Manual/custom media additions (curated, always included; deduped by URL/title)
 CUSTOM_MEDIA_ADDITIONS: list[MediaItem] = [
     {
         "type": "article",
@@ -381,6 +381,61 @@ CUSTOM_MEDIA_ADDITIONS: list[MediaItem] = [
         "sourceType": "Other",
         "image": None,
         "keywords": ["custom"],
+    },
+    {
+        "type": "article",
+        "source": "Oceanographic Magazine",
+        "title": "Epaulette shark research in Oceanographic Magazine",
+        "description": "Feature coverage of RummerLab epaulette shark research highlighting the team's long-running work on climate change, reef sharks, and accessible ocean science.",
+        "url": "https://www.oceanographicmagazine.com/",
+        "date": "2021-10-22T00:00:00Z",
+        "sourceType": "Other",
+        "image": None,
+        "keywords": ["custom", "epaulette", "print"],
+    },
+    {
+        "type": "article",
+        "source": "Sydney Morning Herald",
+        "title": "Science trails the tales of city's bull sharks",
+        "description": "Syndicated coverage quoting Jodie Rummer on warming waters, bull shark movements, and the importance of healthy shark populations in healthy marine ecosystems.",
+        "url": "",
+        "date": "2024-02-01T00:00:00Z",
+        "sourceType": "Other",
+        "image": None,
+        "keywords": ["custom", "print"],
+    },
+    {
+        "type": "article",
+        "source": "Brisbane Times / SMH / The Age / WA Today",
+        "title": "Shark diaries: Where did Lucy, Bruce and Paulie the bull sharks go this week?",
+        "description": "Online syndicated coverage quoting Jodie Rummer on bull shark migration, warm Sydney waters, and shark conservation.",
+        "url": "",
+        "date": "2024-01-31T00:00:00Z",
+        "sourceType": "Other",
+        "image": None,
+        "keywords": ["custom", "online"],
+    },
+    {
+        "type": "article",
+        "source": "ABC Radio Queensland",
+        "title": "Professor Jodie Rummer on Cyclone Kirrily and reef climate impacts",
+        "description": "ABC Radio Queensland interview discussing Cyclone Kirrily, climate impacts, and the Great Barrier Reef.",
+        "url": "https://youtu.be/G0Khf32LHEQ",
+        "date": "2024-01-31T00:00:00Z",
+        "sourceType": "Other",
+        "image": None,
+        "keywords": ["custom", "audio", "youtube"],
+    },
+    {
+        "type": "article",
+        "source": "WIN News",
+        "title": "Coral reefs and conference coverage featuring Dr Jodie Rummer",
+        "description": "Regional WIN News coverage from the Australian Coral Reef Society conference in Townsville, featuring Jodie Rummer as ACRS President on coral reefs and climate action.",
+        "url": "",
+        "date": "2025-09-17T00:00:00Z",
+        "sourceType": "Other",
+        "image": None,
+        "keywords": ["custom", "tv"],
     },
 ]
 
@@ -1406,7 +1461,6 @@ def fetch_all_news(existing_urls: set[str] | None = None) -> list[MediaItem]:
         for existing in conflicts.values():
             remove_article(existing)
         add_article(article)
-
     unique_articles = list(article_by_title.values())
 
     # Sort by source priority (lower first), then by date (newest first)

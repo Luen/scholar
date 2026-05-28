@@ -6,6 +6,7 @@ from src.news_scraper import (
     MediaItem,
     does_article_mention_keywords,
     does_article_mention_rummer,
+    fetch_all_news,
     url_is_excluded_own_site,
 )
 
@@ -413,6 +414,30 @@ def test_custom_media_includes_may_2026_print_placements():
     assert "Shark victim an action man" in print_titles
     assert "DIED WITH MATES" in print_titles
     assert "Cairns man identified as shark attack victim" in print_titles
+
+
+def test_custom_media_includes_forwarded_media_monitoring_tasks():
+    """Forwarded Gmail media tasks are preserved as curated media additions."""
+    titles = {a["title"] for a in CUSTOM_MEDIA_ADDITIONS}
+    assert "Epaulette shark research in Oceanographic Magazine" in titles
+    assert "Science trails the tales of city's bull sharks" in titles
+    assert "Shark diaries: Where did Lucy, Bruce and Paulie the bull sharks go this week?" in titles
+    assert "Professor Jodie Rummer on Cyclone Kirrily and reef climate impacts" in titles
+    assert "Coral reefs and conference coverage featuring Dr Jodie Rummer" in titles
+
+
+def test_fetch_all_news_preserves_custom_media_without_urls(monkeypatch):
+    """Blank custom URLs should not collapse distinct print/TV/audio placements."""
+    monkeypatch.setattr("src.news_scraper.RSS_FEEDS", {})
+    monkeypatch.setattr("src.news_scraper.fetch_guardian_articles", lambda: [])
+    monkeypatch.setattr("src.news_scraper.fetch_newsapi_articles", lambda: [])
+    monkeypatch.setattr("src.news_scraper.fetch_gnews_articles", lambda: [])
+    monkeypatch.setattr("src.news_scraper.time.sleep", lambda _seconds: None)
+
+    expected_titles = {a["title"] for a in CUSTOM_MEDIA_ADDITIONS if not a["url"]}
+    actual_titles = {a["title"] for a in fetch_all_news()}
+
+    assert expected_titles <= actual_titles
 
 
 def test_does_article_mention_rummer_accepts_name_and_lab():
