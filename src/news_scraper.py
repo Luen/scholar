@@ -90,7 +90,7 @@ def _url_is_excluded_social_or_profile(host: str, path: str) -> bool:
         return _url_first_path_segment(path) in _FACEBOOK_PAGE_SLUGS
     if host in ("instagram.com", "www.instagram.com"):
         return _url_first_path_segment(path) in _INSTAGRAM_PROFILE_SLUGS
-    if host.endswith("linkedin.com"):
+    if host == "linkedin.com" or host.endswith(".linkedin.com"):
         path_lower = (path or "").lower()
         return path_lower.startswith(_LINKEDIN_PROFILE_PREFIX)
     if host in ("x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com"):

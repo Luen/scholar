@@ -69,6 +69,7 @@ def test_url_is_excluded_own_site():
     )
     assert not url_is_excluded_own_site("https://www.abc.net.au/news/2026-01-16/example")
     assert not url_is_excluded_own_site("https://www.facebook.com/someotherpage/posts/123")
+    assert not url_is_excluded_own_site("https://notlinkedin.com/in/jodie-rummer-profile")
     assert not url_is_excluded_own_site("")
 
 
@@ -222,6 +223,33 @@ def test_fetch_all_news_keeps_custom_duplicate_over_scraped_source(monkeypatch):
     assert articles[0]["description"] == "Curated coverage."
 
 
+def test_fetch_all_news_excludes_own_site_results(monkeypatch):
+    """Own-site and profile URLs are removed during scraper aggregation."""
+    _disable_external_news_sources(monkeypatch)
+    monkeypatch.setattr(news_scraper, "CUSTOM_MEDIA_ADDITIONS", [])
+    monkeypatch.setattr(
+        news_scraper,
+        "fetch_gnews_articles",
+        lambda: [
+            _media_item(
+                "Own-site lab update",
+                url="https://rummerlab.com/news/field-update",
+                source="GNews",
+            ),
+            _media_item(
+                "External media story",
+                url="https://example.test/news/field-update",
+                source="GNews",
+            ),
+        ],
+    )
+
+    articles = news_scraper.fetch_all_news()
+
+    assert len(articles) == 1
+    assert articles[0]["title"] == "External media story"
+
+
 def test_custom_media_includes_may_2026_shark_attack_coverage():
     """Custom additions include the curated May 2026 shark-attack coverage URLs."""
     urls = {a["url"] for a in CUSTOM_MEDIA_ADDITIONS}
@@ -290,6 +318,22 @@ def test_does_article_mention_rummer_rejects_unrelated_rummer_surname():
     )
 
 
+def test_does_article_mention_rummer_rejects_kirstein_rummery():
+    assert not does_article_mention_rummer(
+        "",
+        "Care poverty and unmet needs",
+        "Kirstein Rummery discusses social care systems.",
+    )
+
+
+def test_does_article_mention_rummer_rejects_dictionary_false_positive():
+    assert not does_article_mention_rummer(
+        "",
+        "Definition of rummer",
+        "A large-bowled drinking glass with prunts.",
+    )
+
+
 def test_does_article_mention_rummer_professor_rummer_needs_marine_context():
     assert does_article_mention_rummer(
         "",
@@ -307,3 +351,16 @@ def test_does_article_mention_keywords_empty_when_not_relevant():
     assert not does_article_mention_keywords(
         "", "Marine Biology - JCU", "World leader in environmental sciences."
     )
+
+
+def test_does_article_mention_keywords_returns_default_and_lab_tags():
+    assert does_article_mention_keywords(
+        "",
+        "Walking sharks study",
+        "Professor Jodie Rummer from James Cook University led the research.",
+    ) == {"Jodie Rummer"}
+    assert does_article_mention_keywords(
+        "",
+        "RummerLab field season",
+        "Physioshark team update from Moorea.",
+    ) == {"RummerLab", "Physioshark"}
