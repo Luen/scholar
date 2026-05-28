@@ -81,6 +81,16 @@ def test_custom_media_includes_may_2026_print_placements():
     assert "Cairns man identified as shark attack victim" in print_titles
 
 
+def test_custom_media_includes_forwarded_media_monitoring_tasks():
+    """Forwarded Gmail media tasks are preserved as curated media additions."""
+    titles = {a["title"] for a in CUSTOM_MEDIA_ADDITIONS}
+    assert "Epaulette shark research in Oceanographic Magazine" in titles
+    assert "Science trails the tales of city’s bull sharks" in titles
+    assert "Shark diaries: Where did Lucy, Bruce and Paulie the bull sharks go this week?" in titles
+    assert "Professor Jodie Rummer on Cyclone Kirrily and reef climate impacts" in titles
+    assert "Coral reefs and conference coverage featuring Dr Jodie Rummer" in titles
+
+
 def test_does_article_mention_rummer_accepts_name_and_lab():
     assert does_article_mention_rummer(
         "",
