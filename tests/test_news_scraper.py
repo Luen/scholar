@@ -183,6 +183,101 @@ def test_fetch_all_news_dedupes_by_title_when_urls_differ(monkeypatch):
     assert articles[0]["url"] == ""
 
 
+def test_fetch_all_news_keeps_default_priority_custom_duplicate(monkeypatch):
+    """Curated publishers missing from the rank map should still beat fetched duplicates."""
+    _disable_external_news_sources(monkeypatch)
+    curated_url = "https://www.news.com.au/travel/example-story"
+    monkeypatch.setattr(
+        news_scraper,
+        "CUSTOM_MEDIA_ADDITIONS",
+        [
+            _media_item(
+                "Bob Katter calls for shark culling after horror attack leaves Cairns spearfisherman dead",
+                url=curated_url,
+                source="news.com.au",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        news_scraper,
+        "fetch_gnews_articles",
+        lambda: [
+            _media_item(
+                "Bob Katter calls for shark culling after horror attack leaves Cairns spearfisherman dead - news.com.au",
+                url="https://news.google.com/read/example",
+                source="GNews",
+            )
+        ],
+    )
+
+    articles = news_scraper.fetch_all_news()
+
+    assert len(articles) == 1
+    assert articles[0]["source"] == "news.com.au"
+    assert articles[0]["url"] == curated_url
+
+
+def test_fetch_all_news_does_not_overwrite_better_title_match_from_url_match(monkeypatch):
+    """A URL replacement cannot evict a higher-priority article with the same title."""
+    _disable_external_news_sources(monkeypatch)
+    monkeypatch.setattr(
+        news_scraper,
+        "CUSTOM_MEDIA_ADDITIONS",
+        [_media_item("Shared print headline", source="Cairns Post")],
+    )
+    monkeypatch.setattr(
+        news_scraper,
+        "fetch_newsapi_articles",
+        lambda: [
+            _media_item(
+                "Original wire headline",
+                url="https://example.test/news/story",
+                source="NewsAPI",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        news_scraper,
+        "fetch_gnews_articles",
+        lambda: [
+            _media_item(
+                "Shared print headline",
+                url="https://example.test/news/story",
+                source="GNews",
+            )
+        ],
+    )
+
+    titles = [item["title"] for item in news_scraper.fetch_all_news()]
+
+    assert titles == ["Shared print headline"]
+
+
+def test_fetch_all_news_dedupes_tracking_url_variants(monkeypatch):
+    """Tracking-only query strings and trailing slashes should not prevent URL dedup."""
+    _disable_external_news_sources(monkeypatch)
+    monkeypatch.setattr(
+        news_scraper,
+        "CUSTOM_MEDIA_ADDITIONS",
+        [
+            _media_item(
+                "Tracked duplicate",
+                url="https://example.test/news/story/?utm_source=feed&giftid=abc#comments",
+                source="NewsAPI",
+            ),
+            _media_item(
+                "Canonical duplicate",
+                url="https://example.test/news/story",
+                source="Cairns Post",
+            ),
+        ],
+    )
+
+    titles = [item["title"] for item in news_scraper.fetch_all_news()]
+
+    assert titles == ["Canonical duplicate"]
+
+
 def test_custom_media_includes_may_2026_shark_attack_coverage():
     """Custom additions include the curated May 2026 shark-attack coverage URLs."""
     urls = {a["url"] for a in CUSTOM_MEDIA_ADDITIONS}
