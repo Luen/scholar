@@ -190,7 +190,7 @@ class MediaItem(TypedDict):
     keywords: Optional[list[str]]
 
 
-# Manual/custom media additions (curated, always included; deduped by URL)
+# Manual/custom media additions (curated, always included; deduped by URL or title)
 CUSTOM_MEDIA_ADDITIONS: list[MediaItem] = [
     {
         "type": "article",
@@ -1283,12 +1283,10 @@ def fetch_all_news() -> list[MediaItem]:
         "Newspaper4k": 14,
     }
     default_priority = 15
-    custom_priority = -1
 
-    def article_priority(article: MediaItem) -> int:
-        if "custom" in (article.get("keywords") or []):
-            return custom_priority
-        return source_priorities.get(article["source"], default_priority)
+    def article_priority(article: MediaItem) -> tuple[int, int]:
+        custom_tier = 0 if "custom" in (article.get("keywords") or []) else 1
+        return (custom_tier, source_priorities.get(article["source"], default_priority))
 
     def normalize_title(t: str) -> str:
         t = t.lower()
