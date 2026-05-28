@@ -75,7 +75,7 @@ EXCLUDED_OWN_SITE_HOST_SUFFIXES = (
 # Lab/personal social profiles and JCU portfolio (not third-party news articles).
 _FACEBOOK_PAGE_SLUGS = frozenset({"jodie.rummer", "physioshark", "rummerlab"})
 _INSTAGRAM_PROFILE_SLUGS = frozenset({"rummerjodie", "physioshark", "rummerlab"})
-_X_PROFILE_SLUGS = frozenset({"physiologyfish"})
+_X_PROFILE_SLUGS = frozenset({"physiologyfish", "physioshark", "rummerlab"})
 _LINKEDIN_PROFILE_PREFIX = "/in/jodie-rummer"
 _JCU_PORTFOLIO_PATH_PREFIX = "/researchers/jodie.rummer"
 
@@ -88,7 +88,7 @@ def _url_first_path_segment(path: str) -> str:
 def _url_is_excluded_social_or_profile(host: str, path: str) -> bool:
     if host in ("facebook.com", "www.facebook.com", "m.facebook.com", "web.facebook.com"):
         return _url_first_path_segment(path) in _FACEBOOK_PAGE_SLUGS
-    if host in ("instagram.com", "www.instagram.com"):
+    if host in ("instagram.com", "www.instagram.com", "m.instagram.com"):
         return _url_first_path_segment(path) in _INSTAGRAM_PROFILE_SLUGS
     if host == "linkedin.com" or host.endswith(".linkedin.com"):
         path_lower = (path or "").lower()
