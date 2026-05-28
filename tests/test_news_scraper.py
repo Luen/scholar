@@ -96,6 +96,57 @@ def test_fetch_all_news_preserves_distinct_url_less_custom_items(monkeypatch):
     assert titles == {"First print placement", "Second print placement"}
 
 
+def test_fetch_all_news_keeps_custom_duplicate_over_scraped_source(monkeypatch):
+    """Custom additions should win even when their source is not priority-listed."""
+    monkeypatch.setattr(news_scraper, "RSS_FEEDS", {})
+    monkeypatch.setattr(news_scraper, "fetch_guardian_articles", lambda: [])
+    monkeypatch.setattr(news_scraper, "fetch_newsapi_articles", lambda: [])
+    monkeypatch.setattr(news_scraper.time, "sleep", lambda _: None)
+    monkeypatch.delenv("NEWS_ENABLE_GOOGLE_SEARCH", raising=False)
+    monkeypatch.delenv("NEWS_ENABLE_NEWSPAPER4K", raising=False)
+    monkeypatch.delenv("NEWS_ENABLE_WEB_SCRAPE", raising=False)
+    monkeypatch.setattr(
+        news_scraper,
+        "CUSTOM_MEDIA_ADDITIONS",
+        [
+            {
+                "type": "article",
+                "source": "Unlisted Custom Source",
+                "title": "Curated duplicate story",
+                "description": "Curated description.",
+                "url": "https://example.com/curated-duplicate",
+                "date": "2026-05-26T00:00:00Z",
+                "sourceType": "Other",
+                "image": None,
+                "keywords": ["custom"],
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        news_scraper,
+        "fetch_gnews_articles",
+        lambda: [
+            {
+                "type": "article",
+                "source": "GNews",
+                "title": "Curated duplicate story",
+                "description": "Scraped description.",
+                "url": "https://example.com/curated-duplicate",
+                "date": "2026-05-27T00:00:00Z",
+                "sourceType": "Other",
+                "image": None,
+                "keywords": ["scraped"],
+            }
+        ],
+    )
+
+    articles = news_scraper.fetch_all_news()
+
+    assert len(articles) == 1
+    assert articles[0]["source"] == "Unlisted Custom Source"
+    assert articles[0]["description"] == "Curated description."
+
+
 def test_custom_media_includes_may_2026_shark_attack_coverage():
     """Custom additions include the curated May 2026 shark-attack coverage URLs."""
     urls = {a["url"] for a in CUSTOM_MEDIA_ADDITIONS}
