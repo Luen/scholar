@@ -1284,9 +1284,12 @@ def fetch_all_news() -> list[MediaItem]:
     }
     default_priority = 15
 
-    def article_priority(article: MediaItem) -> tuple[int, int]:
+    def source_priority(article: MediaItem) -> int:
+        return source_priorities.get(article["source"], default_priority)
+
+    def duplicate_priority(article: MediaItem) -> tuple[int, int]:
         custom_tier = 0 if "custom" in (article.get("keywords") or []) else 1
-        return (custom_tier, source_priorities.get(article["source"], default_priority))
+        return (custom_tier, source_priority(article))
 
     def normalize_title(t: str) -> str:
         t = t.lower()
@@ -1314,7 +1317,7 @@ def fetch_all_news() -> list[MediaItem]:
         if url_is_excluded_own_site(url):
             continue
         title = article["title"]
-        priority = article_priority(article)
+        priority = duplicate_priority(article)
         norm_title = normalize_title(title)
 
         existing = article_by_url.get(url) if url else None
@@ -1322,7 +1325,7 @@ def fetch_all_news() -> list[MediaItem]:
             existing = article_by_title.get(norm_title)
 
         if existing is not None:
-            existing_pri = article_priority(existing)
+            existing_pri = duplicate_priority(existing)
             if priority < existing_pri:
                 remove_article(existing)
                 add_article(article)
@@ -1333,7 +1336,7 @@ def fetch_all_news() -> list[MediaItem]:
 
     # Sort by source priority (lower first), then by date (newest first)
     def sort_key(a: MediaItem) -> tuple:
-        pri = article_priority(a)
+        pri = source_priority(a)
         try:
             ts = -datetime.fromisoformat(a["date"].replace("Z", "+00:00")).timestamp()
         except (ValueError, TypeError):
