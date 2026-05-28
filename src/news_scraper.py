@@ -8,7 +8,7 @@ from datetime import datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Literal, Optional, TypedDict
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import feedparser
 import pytz
@@ -1264,7 +1264,8 @@ def fetch_all_news() -> list[MediaItem]:
                 logger.error(f"Error scraping {site}: {str(e)}")
 
     # Deduplicate with source priorities (lower = higher priority).
-    # Custom additions are curated and should win over scraped duplicates (same URL/title).
+    # Custom additions should win over fetched duplicates, then source rank breaks ties
+    # within the custom/fetched groups.
     source_priorities: dict[str, int] = {
         "Cairns Post": 0,
         "Discover Wildlife": 0,
@@ -1283,10 +1284,15 @@ def fetch_all_news() -> list[MediaItem]:
         "Newspaper4k": 14,
     }
     default_priority = 15
-
-    def article_priority(article: MediaItem) -> tuple[int, int]:
-        custom_tier = 0 if "custom" in (article.get("keywords") or []) else 1
-        return (custom_tier, source_priorities.get(article["source"], default_priority))
+    tracking_query_params = {
+        "btr",
+        "fbclid",
+        "gclid",
+        "giftid",
+        "igshid",
+        "mc_cid",
+        "mc_eid",
+    }
 
     def normalize_title(t: str) -> str:
         t = t.lower()
@@ -1294,17 +1300,75 @@ def fetch_all_news() -> list[MediaItem]:
         t = re.sub(r"[^\w\s]", "", t)
         return t.strip()
 
+    def is_tracking_query_param(name: str) -> bool:
+        lowered = name.lower()
+        return lowered in tracking_query_params or lowered.startswith("utm_")
+
+    def normalize_url(url: str) -> str:
+        """Normalize article URLs enough to catch common tracking-only variants."""
+        stripped = url.strip()
+        if not stripped:
+            return ""
+        try:
+            parsed = urlparse(stripped)
+            if not parsed.scheme or not parsed.netloc:
+                return stripped
+            path = parsed.path or "/"
+            if path != "/":
+                path = path.rstrip("/")
+            query = urlencode(
+                sorted(
+                    (key, value)
+                    for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+                    if not is_tracking_query_param(key)
+                )
+            )
+            return urlunparse(
+                (
+                    parsed.scheme.lower(),
+                    parsed.netloc.lower().rstrip("."),
+                    path,
+                    "",
+                    query,
+                    "",
+                )
+            )
+        except ValueError:
+            return stripped
+
+    def source_priority(source: str) -> int:
+        if source.endswith(" (Newspaper4k)"):
+            return source_priorities["Newspaper4k"]
+        return source_priorities.get(source, default_priority)
+
+    custom_article_signatures = {
+        (normalize_title(article["title"]), normalize_url(article["url"]), article["source"])
+        for article in CUSTOM_MEDIA_ADDITIONS
+    }
+
+    def dedupe_priority(article: MediaItem) -> tuple[int, int]:
+        signature = (
+            normalize_title(article["title"]),
+            normalize_url(article["url"]),
+            article["source"],
+        )
+        custom_group = 0 if signature in custom_article_signatures else 1
+        return (custom_group, source_priority(article["source"]))
+
+    def is_higher_priority(article: MediaItem, existing: MediaItem) -> bool:
+        return dedupe_priority(article) < dedupe_priority(existing)
+
     article_by_url: dict[str, MediaItem] = {}
     article_by_title: dict[str, MediaItem] = {}
 
     def add_article(article: MediaItem) -> None:
-        url = article["url"].strip()
+        url = normalize_url(article["url"])
         if url:
             article_by_url[url] = article
         article_by_title[normalize_title(article["title"])] = article
 
     def remove_article(article: MediaItem) -> None:
-        url = article["url"].strip()
+        url = normalize_url(article["url"])
         if url:
             article_by_url.pop(url, None)
         article_by_title.pop(normalize_title(article["title"]), None)
@@ -1313,27 +1377,41 @@ def fetch_all_news() -> list[MediaItem]:
         url = article["url"].strip()
         if url_is_excluded_own_site(url):
             continue
-        title = article["title"]
-        priority = article_priority(article)
-        norm_title = normalize_title(title)
+        url_key = normalize_url(url)
+        title_key = normalize_title(article["title"])
+        url_existing = article_by_url.get(url_key) if url_key else None
+        title_existing = article_by_title.get(title_key)
+        conflicts = {
+            id(existing): existing
+            for existing in (url_existing, title_existing)
+            if existing is not None
+        }
 
-        existing = article_by_url.get(url) if url else None
-        if existing is None:
-            existing = article_by_title.get(norm_title)
-
-        if existing is not None:
-            existing_pri = article_priority(existing)
-            if priority < existing_pri:
-                remove_article(existing)
-                add_article(article)
-        else:
+        if not conflicts:
             add_article(article)
+            continue
+
+        if title_existing is not None and not is_higher_priority(article, title_existing):
+            if (
+                url_existing is not None
+                and url_existing is not title_existing
+                and is_higher_priority(article, url_existing)
+            ):
+                remove_article(url_existing)
+            continue
+
+        if url_existing is not None and not is_higher_priority(article, url_existing):
+            continue
+
+        for existing in conflicts.values():
+            remove_article(existing)
+        add_article(article)
 
     unique_articles = list(article_by_title.values())
 
     # Sort by source priority (lower first), then by date (newest first)
     def sort_key(a: MediaItem) -> tuple:
-        pri = article_priority(a)
+        pri = source_priority(a["source"])
         try:
             ts = -datetime.fromisoformat(a["date"].replace("Z", "+00:00")).timestamp()
         except (ValueError, TypeError):
