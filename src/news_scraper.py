@@ -1137,7 +1137,7 @@ def fetch_newsapi_articles() -> list[MediaItem]:
         return []
 
 
-def fetch_all_news() -> list[MediaItem]:
+def fetch_all_news(existing_urls: set[str] | None = None) -> list[MediaItem]:
     """Fetch news from all sources and combine them."""
     all_articles = list(CUSTOM_MEDIA_ADDITIONS)  # Manual additions first (win on URL/title dedup)
 
@@ -1419,12 +1419,22 @@ def fetch_all_news() -> list[MediaItem]:
         return (pri, ts)
 
     unique_articles.sort(key=sort_key)
+    if existing_urls:
+        existing = {u.strip() for u in existing_urls if isinstance(u, str) and u.strip()}
+        if existing:
+            unique_articles = [
+                article
+                for article in unique_articles
+                if (article.get("url") or "").strip() not in existing
+            ]
     return unique_articles
 
 
-def get_news_data(scholar_name: str) -> dict[str, list[MediaItem]]:
+def get_news_data(
+    scholar_name: str, existing_urls: set[str] | None = None
+) -> dict[str, list[MediaItem]]:
     """Function to fetch all RSS data for a scholar that can be used by main.py"""
-    articles = fetch_all_news()
+    articles = fetch_all_news(existing_urls=existing_urls)
     return {"media": articles}
 
 
