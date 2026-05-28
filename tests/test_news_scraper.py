@@ -424,6 +424,9 @@ def test_custom_media_includes_forwarded_media_monitoring_tasks():
     assert "Shark diaries: Where did Lucy, Bruce and Paulie the bull sharks go this week?" in titles
     assert "Professor Jodie Rummer on Cyclone Kirrily and reef climate impacts" in titles
     assert "Coral reefs and conference coverage featuring Dr Jodie Rummer" in titles
+    assert "Professor Jodie Rummer on ocean warming and the Great Barrier Reef" in titles
+    assert "Dr Jodie Rummer warns shark culling will not address risks" in titles
+    assert "Dr Jodie Rummer discusses shark populations and culling on Breakfast" in titles
 
 
 def test_fetch_all_news_preserves_custom_media_without_urls(monkeypatch):
