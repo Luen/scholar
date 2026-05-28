@@ -74,9 +74,7 @@ def test_custom_media_includes_may_2026_shark_attack_coverage():
 def test_custom_media_includes_may_2026_print_placements():
     """Custom additions include the curated May 2026 print placements."""
     print_titles = {
-        a["title"]
-        for a in CUSTOM_MEDIA_ADDITIONS
-        if "print" in (a.get("keywords") or [])
+        a["title"] for a in CUSTOM_MEDIA_ADDITIONS if "print" in (a.get("keywords") or [])
     }
     assert "Shark victim an action man" in print_titles
     assert "DIED WITH MATES" in print_titles
