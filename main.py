@@ -111,6 +111,21 @@ def bake_media_filtered_fields(author: dict[str, Any], scholar_id: str) -> None:
     enrich_filtered_media_thumbnails(scholar_id, author["media_filtered"])
 
 
+def _existing_media_urls(author: dict[str, Any]) -> set[str]:
+    """Return absolute URLs already indexed in ``media_filtered``."""
+    rows = author.get("media_filtered")
+    if not isinstance(rows, list):
+        return set()
+    urls: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        url = (row.get("url") or "").strip()
+        if url.startswith("http://") or url.startswith("https://"):
+            urls.add(url)
+    return urls
+
+
 def refresh_news_to_disk(config: Config) -> int:
     """
     Load scholar JSON, fetch fresh ``media`` via ``get_news_data``, then filter + thumbnails, save.
@@ -129,7 +144,7 @@ def refresh_news_to_disk(config: Config) -> int:
         log.error("Author JSON at %s has no name; cannot refresh news", config.output_path)
         return 1
     log.info("Refreshing news/media for %s (%s)", config.scholar_id, name)
-    author.update(get_news_data(name))
+    author.update(get_news_data(name, existing_urls=_existing_media_urls(author)))
     bake_media_filtered_fields(author, config.scholar_id)
     save_author(author, config.output_path, bump_last_fetched=False)
     log.info("Wrote media + media_filtered for %s", config.output_path)
@@ -253,7 +268,12 @@ def run(scholar_id: str, config: Config | None = None) -> int:
         save_author(author, config.output_path)
 
     log.info("Fetching news/RSS for %s", author.get("name"))
-    author.update(get_news_data(author.get("name", "")))
+    author.update(
+        get_news_data(
+            author.get("name", ""),
+            existing_urls=_existing_media_urls(previous or {}),
+        )
+    )
     raw_media = author.get("media", []) or []
     log.info("Filtering %d media items for API (writes media_filtered)", len(raw_media))
     bake_media_filtered_fields(author, config.scholar_id)
