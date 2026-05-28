@@ -90,7 +90,7 @@ def _url_is_excluded_social_or_profile(host: str, path: str) -> bool:
         return _url_first_path_segment(path) in _FACEBOOK_PAGE_SLUGS
     if host in ("instagram.com", "www.instagram.com"):
         return _url_first_path_segment(path) in _INSTAGRAM_PROFILE_SLUGS
-    if host.endswith("linkedin.com"):
+    if host == "linkedin.com" or host.endswith(".linkedin.com"):
         path_lower = (path or "").lower()
         return path_lower.startswith(_LINKEDIN_PROFILE_PREFIX)
     if host in ("x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com"):
@@ -1266,7 +1266,6 @@ def fetch_all_news() -> list[MediaItem]:
     # Deduplicate with source priorities (lower = higher priority).
     # Custom additions should win over fetched duplicates, then source rank breaks ties
     # within the custom/fetched groups.
-    custom_article_ids = {id(article) for article in CUSTOM_MEDIA_ADDITIONS}
     source_priorities: dict[str, int] = {
         "Cairns Post": 0,
         "Discover Wildlife": 0,
@@ -1342,8 +1341,18 @@ def fetch_all_news() -> list[MediaItem]:
             return source_priorities["Newspaper4k"]
         return source_priorities.get(source, default_priority)
 
+    custom_article_signatures = {
+        (normalize_title(article["title"]), normalize_url(article["url"]), article["source"])
+        for article in CUSTOM_MEDIA_ADDITIONS
+    }
+
     def dedupe_priority(article: MediaItem) -> tuple[int, int]:
-        custom_group = 0 if id(article) in custom_article_ids else 1
+        signature = (
+            normalize_title(article["title"]),
+            normalize_url(article["url"]),
+            article["source"],
+        )
+        custom_group = 0 if signature in custom_article_signatures else 1
         return (custom_group, source_priority(article["source"]))
 
     def is_higher_priority(article: MediaItem, existing: MediaItem) -> bool:

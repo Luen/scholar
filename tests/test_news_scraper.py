@@ -69,6 +69,7 @@ def test_url_is_excluded_own_site():
     )
     assert not url_is_excluded_own_site("https://www.abc.net.au/news/2026-01-16/example")
     assert not url_is_excluded_own_site("https://www.facebook.com/someotherpage/posts/123")
+    assert not url_is_excluded_own_site("https://notlinkedin.com/in/jodie-rummer-profile")
     assert not url_is_excluded_own_site("")
 
 
@@ -183,6 +184,85 @@ def test_fetch_all_news_dedupes_by_title_when_urls_differ(monkeypatch):
     assert articles[0]["url"] == ""
 
 
+def test_fetch_all_news_keeps_custom_duplicate_over_scraped_source(monkeypatch):
+    """Custom additions should win even when their source is not priority-listed."""
+    _disable_external_news_sources(monkeypatch)
+    monkeypatch.setattr(
+        news_scraper,
+        "CUSTOM_MEDIA_ADDITIONS",
+        [
+            _media_item(
+                "Curated duplicate story",
+                url="https://example.com/curated-duplicate",
+                source="Unlisted Custom Source",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        news_scraper,
+        "fetch_gnews_articles",
+        lambda: [
+            {
+                "type": "article",
+                "source": "GNews",
+                "title": "Curated duplicate story",
+                "description": "Scraped description.",
+                "url": "https://example.com/curated-duplicate",
+                "date": "2026-05-27T00:00:00Z",
+                "sourceType": "Other",
+                "image": None,
+                "keywords": ["scraped"],
+            }
+        ],
+    )
+
+    articles = news_scraper.fetch_all_news()
+
+    assert len(articles) == 1
+    assert articles[0]["source"] == "Unlisted Custom Source"
+    assert articles[0]["description"] == "Curated coverage."
+
+
+def test_fetch_all_news_sorts_distinct_articles_by_source_priority(monkeypatch):
+    """Custom duplicate priority should not move unrelated articles ahead of sources."""
+    _disable_external_news_sources(monkeypatch)
+    monkeypatch.setattr(
+        news_scraper,
+        "CUSTOM_MEDIA_ADDITIONS",
+        [
+            _media_item(
+                "Curated lower-priority article",
+                url="https://example.com/curated-lower-priority",
+                source="Unlisted Custom Source",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        news_scraper,
+        "fetch_gnews_articles",
+        lambda: [
+            {
+                "type": "article",
+                "source": "GNews",
+                "title": "Scraped higher-priority article",
+                "description": "Scraped description.",
+                "url": "https://example.com/scraped-higher-priority",
+                "date": "2026-05-27T00:00:00Z",
+                "sourceType": "Other",
+                "image": None,
+                "keywords": ["Jodie Rummer"],
+            }
+        ],
+    )
+
+    titles = [article["title"] for article in news_scraper.fetch_all_news()]
+
+    assert titles == [
+        "Scraped higher-priority article",
+        "Curated lower-priority article",
+    ]
+
+
 def test_fetch_all_news_keeps_default_priority_custom_duplicate(monkeypatch):
     """Curated publishers missing from the rank map should still beat fetched duplicates."""
     _disable_external_news_sources(monkeypatch)
@@ -278,6 +358,33 @@ def test_fetch_all_news_dedupes_tracking_url_variants(monkeypatch):
     assert titles == ["Canonical duplicate"]
 
 
+def test_fetch_all_news_excludes_own_site_results(monkeypatch):
+    """Own-site and profile URLs are removed during scraper aggregation."""
+    _disable_external_news_sources(monkeypatch)
+    monkeypatch.setattr(news_scraper, "CUSTOM_MEDIA_ADDITIONS", [])
+    monkeypatch.setattr(
+        news_scraper,
+        "fetch_gnews_articles",
+        lambda: [
+            _media_item(
+                "Own-site lab update",
+                url="https://rummerlab.com/news/field-update",
+                source="GNews",
+            ),
+            _media_item(
+                "External media story",
+                url="https://example.test/news/field-update",
+                source="GNews",
+            ),
+        ],
+    )
+
+    articles = news_scraper.fetch_all_news()
+
+    assert len(articles) == 1
+    assert articles[0]["title"] == "External media story"
+
+
 def test_custom_media_includes_may_2026_shark_attack_coverage():
     """Custom additions include the curated May 2026 shark-attack coverage URLs."""
     urls = {a["url"] for a in CUSTOM_MEDIA_ADDITIONS}
@@ -346,6 +453,22 @@ def test_does_article_mention_rummer_rejects_unrelated_rummer_surname():
     )
 
 
+def test_does_article_mention_rummer_rejects_kirstein_rummery():
+    assert not does_article_mention_rummer(
+        "",
+        "Care poverty and unmet needs",
+        "Kirstein Rummery discusses social care systems.",
+    )
+
+
+def test_does_article_mention_rummer_rejects_dictionary_false_positive():
+    assert not does_article_mention_rummer(
+        "",
+        "Definition of rummer",
+        "A large-bowled drinking glass with prunts.",
+    )
+
+
 def test_does_article_mention_rummer_professor_rummer_needs_marine_context():
     assert does_article_mention_rummer(
         "",
@@ -363,3 +486,16 @@ def test_does_article_mention_keywords_empty_when_not_relevant():
     assert not does_article_mention_keywords(
         "", "Marine Biology - JCU", "World leader in environmental sciences."
     )
+
+
+def test_does_article_mention_keywords_returns_default_and_lab_tags():
+    assert does_article_mention_keywords(
+        "",
+        "Walking sharks study",
+        "Professor Jodie Rummer from James Cook University led the research.",
+    ) == {"Jodie Rummer"}
+    assert does_article_mention_keywords(
+        "",
+        "RummerLab field season",
+        "Physioshark team update from Moorea.",
+    ) == {"RummerLab", "Physioshark"}
