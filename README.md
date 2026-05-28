@@ -44,7 +44,7 @@ The stack includes:
 - **web** – Gunicorn + Flask API serving scholar data
 - **cron** – Runs the main scraper and DOI metrics revalidation on a schedule
 
-**Cron schedule** (in `cron/Dockerfile`): full scholar pipeline (`python -u main.py <id>`) at **00:00 every 14 days**; DOI metrics revalidation at **02:00 daily**; **`--refresh-news`** (fetch RSS/APIs, then filter + thumbnails) at **05:00 daily**; **`--bake-media-filtered`** (recompute filters/thumbnails from on-disk `media` only) at **12:00 daily** — each for the three scholar IDs in that file.
+**Cron schedule** (in `cron/Dockerfile`): full scholar pipeline (`python -u main.py <id>`) at **00:00 daily**; DOI metrics revalidation at **02:00 daily**; **`--refresh-news`** (fetch RSS/APIs, then filter + thumbnails) at **05:00 daily**; **`--bake-media-filtered`** (recompute filters/thumbnails from on-disk `media` only) at **12:00 daily** — each for the three scholar IDs in that file.
 
 After each successful `main.py` run, the pipeline writes **`media_filtered`** (and `media_filtered_at`) into the same `scholar_data/<id>.json` file. The `/scholar/<id>/news` API **serves that list** when present, so it does not re-run per-URL Scrapling on every HTTP request. If **`media_filtered` is missing** (new volume, old JSON, or cron has not written it yet), the API **re-runs `filter_media_items` on every `/news` request**, which can take many seconds and will log Scrapling fetches (e.g. Guardian, The Conversation) for rows that are not kept by strict snippet rules alone. **Fix:** run **`--bake-media-filtered`** or **`--refresh-news`** once per ID (see below), or wait for the daily cron job.
 
@@ -226,7 +226,7 @@ Neither phase uses `force_refresh`, so if a request is blocked you keep existing
 
 ## Project structure
 
-- `main.py` – Full scrape, idempotency, **`--bake-media-filtered`**, **`--refresh-news`**
+- `main.py` – Full scrape, idempotency, **`--bake-media-filtered`**, **`--refresh-news`** (skips previously indexed `media_filtered` URLs during fresh news fetch)
 - `src/scholar_fetcher.py` – Author, coauthors, publications from scholarly (with retries)
 - `src/doi_resolver.py` – DOI lookup and resolution (with retries)
 - `src/output.py` – Load/save JSON, `schema_version`, `last_fetched`, resume indices
@@ -295,7 +295,7 @@ python server.py
 - `SCHOLAR_DATA_DIR` – Path to scholar JSON files (default: `scholar_data`)
 - `CACHE_DIR` – HTTP cache directory (default: `cache`)
 - `CACHE_EXPIRE_SECONDS` – Cache expiry (default: 30 days)
-- `FRESH_DATA_SECONDS` – Skip full fetch if data is newer (default: 7 days)
+- `FRESH_DATA_SECONDS` – Skip full fetch if data is newer (default: 23 hours)
 - `MAX_RETRIES`, `RETRY_BASE_DELAY` – Retry settings for Scholar/DOI APIs
 - `COAUTHOR_DELAY`, `PUBLICATION_DELAY` – Rate limiting (seconds)
 - `LOG_FORMAT` – Set to `json` for structured JSON logs (e.g. in Docker)

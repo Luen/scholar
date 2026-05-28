@@ -36,7 +36,8 @@ def test_refresh_news_updates_media_preserves_last_fetched(tmp_path, monkeypatch
     )
     monkeypatch.setenv("SCHOLAR_DATA_DIR", str(d))
 
-    def fake_news(_name: str):
+    def fake_news(_name: str, existing_urls=None):
+        assert existing_urls == set()
         return {"media": [{"title": "new item", "url": ""}]}
 
     monkeypatch.setattr("main.get_news_data", fake_news)
@@ -60,3 +61,33 @@ def test_refresh_news_fails_without_author_name(tmp_path, monkeypatch):
     )
     monkeypatch.setenv("SCHOLAR_DATA_DIR", str(d))
     assert refresh_news_to_disk(Config(scholar_id=sid)) == 1
+
+
+def test_refresh_news_passes_existing_media_filtered_urls(tmp_path, monkeypatch):
+    d = tmp_path / "scholar_data"
+    d.mkdir()
+    sid = "ynWS968AAAAJ"
+    fp = d / f"{sid}.json"
+    existing_url = "https://example.test/already-indexed"
+    fp.write_text(
+        json.dumps(
+            {
+                "name": "Dr X",
+                "media": [],
+                "media_filtered": [{"title": "old", "url": existing_url}],
+                "last_fetched": "2018-01-01T00:00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCHOLAR_DATA_DIR", str(d))
+
+    def fake_news(_name: str, existing_urls=None):
+        assert existing_urls == {existing_url}
+        return {"media": [{"title": "new item", "url": ""}]}
+
+    monkeypatch.setattr("main.get_news_data", fake_news)
+    monkeypatch.setattr("main.filter_media_items", lambda items: list(items))
+    monkeypatch.setattr("main.enrich_filtered_media_thumbnails", lambda _sid, _items: 0)
+
+    assert refresh_news_to_disk(Config(scholar_id=sid)) == 0
