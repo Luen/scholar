@@ -442,7 +442,7 @@ CUSTOM_MEDIA_ADDITIONS: list[MediaItem] = [
         "source": "ABC Radio Queensland",
         "title": "Professor Jodie Rummer on ocean warming and the Great Barrier Reef",
         "description": "ABC Queensland statewide radio interview giving the Copernicus report a Queensland perspective, with a focus on oceans, the Reef, emissions cuts, and the limits of adaptation alone.",
-        "url": "https://app.mediaportal.com/isentia/#/playnow/v2?id=R00129000584&channel=ABC%20Radio%20Brisbane&location=Australia&date=2026-01-15T16%3A08%3A19&program=Semi-Statewide%20Drive&item_id=1294263429&prospect_id=-52367445277&is_video=false&keywords=Jodie%20rummer&expiry=1800029299&signature=TSRrl4pFBhb2RVDG9E0ecEdWrAcQKz0z8bZazF55u5lZ6sKX2aXtNoC-l4c0s0iWxwsnsnssUAQYcJEh9M6Xu5VbxnMPbC3QG5aBimP3OoH22Q1HvD9eNkCntunFV-CCvVG8Xsa-57y3uLHbuTe4VL-a8~jkTreNgcu5dyhkfXy-1rFnAqMjPwh6N8a546AZqxz1abWFwT9fZ2yxcdNqyRKCxiM82T10-99ztHYEc0mQwNQrItijTpprztPawqzqZsfUGOCFlYWydnMipuIcc6aV1Ga8ZCgfmXCoMzrTKbArYpqxmaUGIlSxCrjkHnCd~Q7CQgn-4-eVFB9ZZNeMuA__",
+        "url": "",
         "date": "2026-01-15T00:00:00Z",
         "sourceType": "Other",
         "image": None,

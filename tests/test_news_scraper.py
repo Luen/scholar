@@ -51,6 +51,12 @@ def test_custom_media_additions_structure():
             seen_urls.add(item["url"])
 
 
+def test_custom_media_omits_private_media_monitoring_urls():
+    """Private media-monitoring links expire and should not be published."""
+    for item in CUSTOM_MEDIA_ADDITIONS:
+        assert "app.mediaportal.com/isentia" not in item["url"].lower()
+
+
 def test_url_is_excluded_own_site():
     assert url_is_excluded_own_site("https://rummerlab.com/about")
     assert url_is_excluded_own_site("https://www.jodierummer.com/news/post")
