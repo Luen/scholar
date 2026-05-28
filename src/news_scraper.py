@@ -190,7 +190,7 @@ class MediaItem(TypedDict):
     keywords: Optional[list[str]]
 
 
-# Manual/custom media additions (curated, always included; deduped by URL)
+# Manual/custom media additions (curated, always included; deduped by URL/title)
 CUSTOM_MEDIA_ADDITIONS: list[MediaItem] = [
     {
         "type": "article",
@@ -386,7 +386,7 @@ CUSTOM_MEDIA_ADDITIONS: list[MediaItem] = [
         "type": "article",
         "source": "Oceanographic Magazine",
         "title": "Epaulette shark research in Oceanographic Magazine",
-        "description": "Feature coverage of RummerLab epaulette shark research highlighting the team’s long-running work on climate change, reef sharks, and accessible ocean science.",
+        "description": "Feature coverage of RummerLab epaulette shark research highlighting the team's long-running work on climate change, reef sharks, and accessible ocean science.",
         "url": "https://www.oceanographicmagazine.com/",
         "date": "2021-10-22T00:00:00Z",
         "sourceType": "Other",
@@ -396,7 +396,7 @@ CUSTOM_MEDIA_ADDITIONS: list[MediaItem] = [
     {
         "type": "article",
         "source": "Sydney Morning Herald",
-        "title": "Science trails the tales of city’s bull sharks",
+        "title": "Science trails the tales of city's bull sharks",
         "description": "Syndicated coverage quoting Jodie Rummer on warming waters, bull shark movements, and the importance of healthy shark populations in healthy marine ecosystems.",
         "url": "",
         "date": "2024-02-01T00:00:00Z",
@@ -1348,7 +1348,7 @@ def fetch_all_news() -> list[MediaItem]:
     article_by_url: dict[str, MediaItem] = {}
     article_by_title: dict[str, MediaItem] = {}
     for article in all_articles:
-        url = article["url"]
+        url = article["url"].strip()
         if url_is_excluded_own_site(url):
             continue
         title = article["title"]
@@ -1356,24 +1356,29 @@ def fetch_all_news() -> list[MediaItem]:
         priority = source_priorities.get(src, default_priority)
         norm_title = normalize_title(title)
 
-        if url in article_by_url:
+        if url and url in article_by_url:
             existing = article_by_url[url]
             existing_pri = source_priorities.get(existing["source"], default_priority)
             if priority < existing_pri:
+                article_by_title.pop(normalize_title(existing["title"]), None)
                 article_by_url[url] = article
                 article_by_title[norm_title] = article
         elif norm_title in article_by_title:
             existing = article_by_title[norm_title]
             existing_pri = source_priorities.get(existing["source"], default_priority)
             if priority < existing_pri:
-                article_by_url.pop(existing["url"], None)
-                article_by_url[url] = article
+                existing_url = existing["url"].strip()
+                if existing_url:
+                    article_by_url.pop(existing_url, None)
+                if url:
+                    article_by_url[url] = article
                 article_by_title[norm_title] = article
         else:
-            article_by_url[url] = article
+            if url:
+                article_by_url[url] = article
             article_by_title[norm_title] = article
 
-    unique_articles = list(article_by_url.values())
+    unique_articles = list(article_by_title.values())
 
     # Sort by source priority (lower first), then by date (newest first)
     def sort_key(a: MediaItem) -> tuple:
