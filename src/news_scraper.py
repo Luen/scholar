@@ -1290,16 +1290,21 @@ def fetch_all_news() -> list[MediaItem]:
         t = re.sub(r"[^\w\s]", "", t)
         return t.strip()
 
-    def article_dedupe_key(article: MediaItem, norm_title: str | None = None) -> str:
+    article_by_url: dict[str, MediaItem] = {}
+    article_by_title: dict[str, MediaItem] = {}
+
+    def add_article(article: MediaItem) -> None:
         url = article["url"].strip()
         if url:
-            return url
-        if norm_title is None:
-            norm_title = normalize_title(article["title"])
-        return f"__missing_url__:{norm_title}"
+            article_by_url[url] = article
+        article_by_title[normalize_title(article["title"])] = article
 
-    article_by_key: dict[str, MediaItem] = {}
-    article_by_title: dict[str, MediaItem] = {}
+    def remove_article(article: MediaItem) -> None:
+        url = article["url"].strip()
+        if url:
+            article_by_url.pop(url, None)
+        article_by_title.pop(normalize_title(article["title"]), None)
+
     for article in all_articles:
         url = article["url"].strip()
         if url_is_excluded_own_site(url):
@@ -1308,26 +1313,20 @@ def fetch_all_news() -> list[MediaItem]:
         src = article["source"]
         priority = source_priorities.get(src, default_priority)
         norm_title = normalize_title(title)
-        article_key = article_dedupe_key(article, norm_title)
 
-        if article_key in article_by_key:
-            existing = article_by_key[article_key]
+        existing = article_by_url.get(url) if url else None
+        if existing is None:
+            existing = article_by_title.get(norm_title)
+
+        if existing is not None:
             existing_pri = source_priorities.get(existing["source"], default_priority)
             if priority < existing_pri:
-                article_by_key[article_key] = article
-                article_by_title[norm_title] = article
-        elif norm_title in article_by_title:
-            existing = article_by_title[norm_title]
-            existing_pri = source_priorities.get(existing["source"], default_priority)
-            if priority < existing_pri:
-                article_by_key.pop(article_dedupe_key(existing), None)
-                article_by_key[article_key] = article
-                article_by_title[norm_title] = article
+                remove_article(existing)
+                add_article(article)
         else:
-            article_by_key[article_key] = article
-            article_by_title[norm_title] = article
+            add_article(article)
 
-    unique_articles = list(article_by_key.values())
+    unique_articles = list(article_by_title.values())
 
     # Sort by source priority (lower first), then by date (newest first)
     def sort_key(a: MediaItem) -> tuple:
