@@ -1,5 +1,6 @@
 """Tests for news scraper."""
 
+import src.news_scraper as news_scraper
 from src.news_scraper import (
     CUSTOM_MEDIA_ADDITIONS,
     does_article_mention_keywords,
@@ -54,6 +55,47 @@ def test_custom_media_includes_expected_sources():
     assert "ABC News" in sources
 
 
+def test_fetch_all_news_preserves_distinct_url_less_custom_items(monkeypatch):
+    """URL-less print placements should dedupe by title, not collapse into one blank URL."""
+    monkeypatch.setattr(news_scraper, "RSS_FEEDS", {})
+    monkeypatch.setattr(news_scraper, "fetch_guardian_articles", lambda: [])
+    monkeypatch.setattr(news_scraper, "fetch_newsapi_articles", lambda: [])
+    monkeypatch.setattr(news_scraper, "fetch_gnews_articles", lambda: [])
+    monkeypatch.setattr(news_scraper.time, "sleep", lambda _: None)
+    monkeypatch.setattr(
+        news_scraper,
+        "CUSTOM_MEDIA_ADDITIONS",
+        [
+            {
+                "type": "article",
+                "source": "Print Source",
+                "title": "First print placement",
+                "description": "Curated print coverage.",
+                "url": "",
+                "date": "2026-05-26T00:00:00Z",
+                "sourceType": "Other",
+                "image": None,
+                "keywords": ["custom", "print"],
+            },
+            {
+                "type": "article",
+                "source": "Print Source",
+                "title": "Second print placement",
+                "description": "Different curated print coverage.",
+                "url": "",
+                "date": "2026-05-26T00:00:00Z",
+                "sourceType": "Other",
+                "image": None,
+                "keywords": ["custom", "print"],
+            },
+        ],
+    )
+
+    titles = {item["title"] for item in news_scraper.fetch_all_news()}
+
+    assert titles == {"First print placement", "Second print placement"}
+
+
 def test_custom_media_includes_may_2026_shark_attack_coverage():
     """Custom additions include the curated May 2026 shark-attack coverage URLs."""
     urls = {a["url"] for a in CUSTOM_MEDIA_ADDITIONS}
@@ -74,9 +116,7 @@ def test_custom_media_includes_may_2026_shark_attack_coverage():
 def test_custom_media_includes_may_2026_print_placements():
     """Custom additions include the curated May 2026 print placements."""
     print_titles = {
-        a["title"]
-        for a in CUSTOM_MEDIA_ADDITIONS
-        if "print" in (a.get("keywords") or [])
+        a["title"] for a in CUSTOM_MEDIA_ADDITIONS if "print" in (a.get("keywords") or [])
     }
     assert "Shark victim an action man" in print_titles
     assert "DIED WITH MATES" in print_titles
