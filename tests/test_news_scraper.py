@@ -1,9 +1,11 @@
 """Tests for news scraper."""
 
+from src import news_scraper
 from src.news_scraper import (
     CUSTOM_MEDIA_ADDITIONS,
     does_article_mention_keywords,
     does_article_mention_rummer,
+    fetch_all_news,
     url_is_excluded_own_site,
 )
 
@@ -79,6 +81,23 @@ def test_custom_media_includes_may_2026_print_placements():
     assert "Shark victim an action man" in print_titles
     assert "DIED WITH MATES" in print_titles
     assert "Cairns man identified as shark attack victim" in print_titles
+
+
+def test_fetch_all_news_keeps_distinct_print_placements_without_urls(monkeypatch):
+    """No-URL custom media should dedupe by title, not collapse into one empty URL."""
+    monkeypatch.setattr(news_scraper, "RSS_FEEDS", {})
+    monkeypatch.setattr(news_scraper, "fetch_guardian_articles", lambda: [])
+    monkeypatch.setattr(news_scraper, "fetch_newsapi_articles", lambda: [])
+    monkeypatch.setattr(news_scraper, "fetch_gnews_articles", lambda: [])
+    monkeypatch.delenv("NEWS_ENABLE_GOOGLE_SEARCH", raising=False)
+    monkeypatch.delenv("NEWS_ENABLE_NEWSPAPER4K", raising=False)
+    monkeypatch.delenv("NEWS_ENABLE_WEB_SCRAPE", raising=False)
+
+    titles = {item["title"] for item in fetch_all_news()}
+
+    assert "Shark victim an action man" in titles
+    assert "DIED WITH MATES" in titles
+    assert "Cairns man identified as shark attack victim" in titles
 
 
 def test_does_article_mention_rummer_accepts_name_and_lab():
