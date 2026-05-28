@@ -172,6 +172,46 @@ def test_fetch_all_news_keeps_custom_duplicate_over_scraped_source(monkeypatch):
     assert articles[0]["description"] == "Curated coverage."
 
 
+def test_fetch_all_news_sorts_distinct_articles_by_source_priority(monkeypatch):
+    """Custom duplicate priority should not move unrelated articles ahead of sources."""
+    _disable_external_news_sources(monkeypatch)
+    monkeypatch.setattr(
+        news_scraper,
+        "CUSTOM_MEDIA_ADDITIONS",
+        [
+            _media_item(
+                "Curated lower-priority article",
+                url="https://example.com/curated-lower-priority",
+                source="Unlisted Custom Source",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        news_scraper,
+        "fetch_gnews_articles",
+        lambda: [
+            {
+                "type": "article",
+                "source": "GNews",
+                "title": "Scraped higher-priority article",
+                "description": "Scraped description.",
+                "url": "https://example.com/scraped-higher-priority",
+                "date": "2026-05-27T00:00:00Z",
+                "sourceType": "Other",
+                "image": None,
+                "keywords": ["Jodie Rummer"],
+            }
+        ],
+    )
+
+    titles = [article["title"] for article in news_scraper.fetch_all_news()]
+
+    assert titles == [
+        "Scraped higher-priority article",
+        "Curated lower-priority article",
+    ]
+
+
 def test_custom_media_includes_may_2026_shark_attack_coverage():
     """Custom additions include the curated May 2026 shark-attack coverage URLs."""
     urls = {a["url"] for a in CUSTOM_MEDIA_ADDITIONS}
