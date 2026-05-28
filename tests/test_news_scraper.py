@@ -102,10 +102,12 @@ def test_fetch_all_news_preserves_real_url_less_custom_items(monkeypatch):
         item["title"] for item in CUSTOM_MEDIA_ADDITIONS if not item["url"].strip()
     }
 
-    titles = {item["title"] for item in news_scraper.fetch_all_news()}
+    returned_url_less_titles = {
+        item["title"] for item in news_scraper.fetch_all_news() if not item["url"].strip()
+    }
 
     assert len(expected_url_less_titles) >= 2
-    assert expected_url_less_titles <= titles
+    assert returned_url_less_titles == expected_url_less_titles
 
 
 def test_fetch_all_news_still_dedupes_non_empty_urls(monkeypatch):
@@ -131,6 +133,54 @@ def test_fetch_all_news_still_dedupes_non_empty_urls(monkeypatch):
     titles = [item["title"] for item in news_scraper.fetch_all_news()]
 
     assert titles == ["Higher-priority duplicate"]
+
+
+def test_fetch_all_news_replaces_same_url_and_removes_old_title(monkeypatch):
+    """A URL replacement should not leave the old title in the title index."""
+    _disable_external_news_sources(monkeypatch)
+    monkeypatch.setattr(
+        news_scraper,
+        "CUSTOM_MEDIA_ADDITIONS",
+        [
+            _media_item(
+                "Lower-priority stale headline",
+                url="https://example.test/news/story",
+                source="NewsAPI",
+            ),
+            _media_item(
+                "Higher-priority curated headline",
+                url="https://example.test/news/story",
+                source="Cairns Post",
+            ),
+        ],
+    )
+
+    titles = [item["title"] for item in news_scraper.fetch_all_news()]
+
+    assert titles == ["Higher-priority curated headline"]
+
+
+def test_fetch_all_news_dedupes_by_title_when_urls_differ(monkeypatch):
+    """Articles with the same normalized title collapse even when one lacks a URL."""
+    _disable_external_news_sources(monkeypatch)
+    monkeypatch.setattr(
+        news_scraper,
+        "CUSTOM_MEDIA_ADDITIONS",
+        [
+            _media_item(
+                "Shared print headline",
+                url="https://example.test/news/story",
+                source="ABC News",
+            ),
+            _media_item("Shared print headline", source="Cairns Post"),
+        ],
+    )
+
+    articles = news_scraper.fetch_all_news()
+
+    assert len(articles) == 1
+    assert articles[0]["source"] == "Cairns Post"
+    assert articles[0]["url"] == ""
 
 
 def test_custom_media_includes_may_2026_shark_attack_coverage():
