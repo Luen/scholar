@@ -190,7 +190,7 @@ class MediaItem(TypedDict):
     keywords: Optional[list[str]]
 
 
-# Manual/custom media additions (curated, always included; deduped by URL)
+# Manual/custom media additions (curated, always included; deduped by URL or title)
 CUSTOM_MEDIA_ADDITIONS: list[MediaItem] = [
     {
         "type": "article",

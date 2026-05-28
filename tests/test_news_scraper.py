@@ -3,14 +3,40 @@
 import src.news_scraper as news_scraper
 from src.news_scraper import (
     CUSTOM_MEDIA_ADDITIONS,
+    MediaItem,
     does_article_mention_keywords,
     does_article_mention_rummer,
     url_is_excluded_own_site,
 )
 
 
+def _disable_external_news_sources(monkeypatch):
+    monkeypatch.setattr(news_scraper, "RSS_FEEDS", {})
+    monkeypatch.setattr(news_scraper, "fetch_guardian_articles", lambda: [])
+    monkeypatch.setattr(news_scraper, "fetch_newsapi_articles", lambda: [])
+    monkeypatch.setattr(news_scraper, "fetch_gnews_articles", lambda: [])
+    monkeypatch.setattr(news_scraper.time, "sleep", lambda _: None)
+    monkeypatch.setenv("NEWS_ENABLE_GOOGLE_SEARCH", "0")
+    monkeypatch.setenv("NEWS_ENABLE_NEWSPAPER4K", "0")
+    monkeypatch.setenv("NEWS_ENABLE_WEB_SCRAPE", "0")
+
+
+def _media_item(title: str, url: str = "", source: str = "Print Source") -> MediaItem:
+    return {
+        "type": "article",
+        "source": source,
+        "title": title,
+        "description": "Curated coverage.",
+        "url": url,
+        "date": "2026-05-26T00:00:00Z",
+        "sourceType": "Other",
+        "image": None,
+        "keywords": ["custom"],
+    }
+
+
 def test_custom_media_additions_structure():
-    """Custom additions have required fields and unique URLs (except one empty)."""
+    """Custom additions have required fields and unique non-empty URLs."""
     assert len(CUSTOM_MEDIA_ADDITIONS) >= 5
     seen_urls = set()
     for item in CUSTOM_MEDIA_ADDITIONS:
@@ -57,43 +83,54 @@ def test_custom_media_includes_expected_sources():
 
 def test_fetch_all_news_preserves_distinct_url_less_custom_items(monkeypatch):
     """URL-less print placements should dedupe by title, not collapse into one blank URL."""
-    monkeypatch.setattr(news_scraper, "RSS_FEEDS", {})
-    monkeypatch.setattr(news_scraper, "fetch_guardian_articles", lambda: [])
-    monkeypatch.setattr(news_scraper, "fetch_newsapi_articles", lambda: [])
-    monkeypatch.setattr(news_scraper, "fetch_gnews_articles", lambda: [])
-    monkeypatch.setattr(news_scraper.time, "sleep", lambda _: None)
+    _disable_external_news_sources(monkeypatch)
     monkeypatch.setattr(
         news_scraper,
         "CUSTOM_MEDIA_ADDITIONS",
-        [
-            {
-                "type": "article",
-                "source": "Print Source",
-                "title": "First print placement",
-                "description": "Curated print coverage.",
-                "url": "",
-                "date": "2026-05-26T00:00:00Z",
-                "sourceType": "Other",
-                "image": None,
-                "keywords": ["custom", "print"],
-            },
-            {
-                "type": "article",
-                "source": "Print Source",
-                "title": "Second print placement",
-                "description": "Different curated print coverage.",
-                "url": "",
-                "date": "2026-05-26T00:00:00Z",
-                "sourceType": "Other",
-                "image": None,
-                "keywords": ["custom", "print"],
-            },
-        ],
+        [_media_item("First print placement"), _media_item("Second print placement")],
     )
 
     titles = {item["title"] for item in news_scraper.fetch_all_news()}
 
     assert titles == {"First print placement", "Second print placement"}
+
+
+def test_fetch_all_news_preserves_real_url_less_custom_items(monkeypatch):
+    """The curated URL-less custom entries survive fetch_all_news deduplication."""
+    _disable_external_news_sources(monkeypatch)
+    expected_url_less_titles = {
+        item["title"] for item in CUSTOM_MEDIA_ADDITIONS if not item["url"].strip()
+    }
+
+    titles = {item["title"] for item in news_scraper.fetch_all_news()}
+
+    assert len(expected_url_less_titles) >= 2
+    assert expected_url_less_titles <= titles
+
+
+def test_fetch_all_news_still_dedupes_non_empty_urls(monkeypatch):
+    """Articles sharing a non-empty URL should collapse to the highest-priority source."""
+    _disable_external_news_sources(monkeypatch)
+    monkeypatch.setattr(
+        news_scraper,
+        "CUSTOM_MEDIA_ADDITIONS",
+        [
+            _media_item(
+                "Lower-priority duplicate",
+                url="https://example.test/news/story",
+                source="NewsAPI",
+            ),
+            _media_item(
+                "Higher-priority duplicate",
+                url="https://example.test/news/story",
+                source="Cairns Post",
+            ),
+        ],
+    )
+
+    titles = [item["title"] for item in news_scraper.fetch_all_news()]
+
+    assert titles == ["Higher-priority duplicate"]
 
 
 def test_custom_media_includes_may_2026_shark_attack_coverage():
