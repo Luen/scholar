@@ -1263,8 +1263,8 @@ def fetch_all_news() -> list[MediaItem]:
             except Exception as e:
                 logger.error(f"Error scraping {site}: {str(e)}")
 
-    # Deduplicate with source priorities (lower = higher priority)
-    # Custom additions are added first, so they win over scraped duplicates (same URL/title)
+    # Deduplicate with source priorities (lower = higher priority).
+    # Custom additions are curated and should win over scraped duplicates (same URL/title).
     source_priorities: dict[str, int] = {
         "Cairns Post": 0,
         "Discover Wildlife": 0,
@@ -1283,6 +1283,10 @@ def fetch_all_news() -> list[MediaItem]:
         "Newspaper4k": 14,
     }
     default_priority = 15
+
+    def article_priority(article: MediaItem) -> tuple[int, int]:
+        custom_tier = 0 if "custom" in (article.get("keywords") or []) else 1
+        return (custom_tier, source_priorities.get(article["source"], default_priority))
 
     def normalize_title(t: str) -> str:
         t = t.lower()
@@ -1310,8 +1314,7 @@ def fetch_all_news() -> list[MediaItem]:
         if url_is_excluded_own_site(url):
             continue
         title = article["title"]
-        src = article["source"]
-        priority = source_priorities.get(src, default_priority)
+        priority = article_priority(article)
         norm_title = normalize_title(title)
 
         existing = article_by_url.get(url) if url else None
@@ -1319,7 +1322,7 @@ def fetch_all_news() -> list[MediaItem]:
             existing = article_by_title.get(norm_title)
 
         if existing is not None:
-            existing_pri = source_priorities.get(existing["source"], default_priority)
+            existing_pri = article_priority(existing)
             if priority < existing_pri:
                 remove_article(existing)
                 add_article(article)
@@ -1330,7 +1333,7 @@ def fetch_all_news() -> list[MediaItem]:
 
     # Sort by source priority (lower first), then by date (newest first)
     def sort_key(a: MediaItem) -> tuple:
-        pri = source_priorities.get(a["source"], default_priority)
+        pri = article_priority(a)
         try:
             ts = -datetime.fromisoformat(a["date"].replace("Z", "+00:00")).timestamp()
         except (ValueError, TypeError):
