@@ -399,6 +399,10 @@ def test_custom_media_includes_may_2026_shark_attack_coverage():
     """Custom additions include the curated May 2026 shark-attack coverage URLs."""
     urls = {a["url"] for a in CUSTOM_MEDIA_ADDITIONS}
     assert (
+        "https://www.cairnspost.com.au/news/cassowary-coast/far-north-qld-shark-attack-victim-at-hull-heads-identified-as-michael-jensz/news-story/17a46d4315b000c949c1a45c73b14bbf"
+        in urls
+    )
+    assert (
         "https://www.news.com.au/travel/travel-updates/incidents/bob-katter-calls-for-shark-culling-after-horror-attack-leaves-cairns-spearfisherman-dead/news-story/56ecba20db4aacb882e84930e8df0d33"
         in urls
     )
@@ -428,11 +432,23 @@ def test_custom_media_includes_forwarded_media_monitoring_tasks():
     assert "Epaulette shark research in Oceanographic Magazine" in titles
     assert "Science trails the tales of city's bull sharks" in titles
     assert "Shark diaries: Where did Lucy, Bruce and Paulie the bull sharks go this week?" in titles
+    urls = {a["url"] for a in CUSTOM_MEDIA_ADDITIONS}
+    assert "https://oceanographicmagazine.com/" in urls
+    assert "https://www.youtube.com/watch?v=G0Khf32LHEQ" in urls
     assert "Professor Jodie Rummer on Cyclone Kirrily and reef climate impacts" in titles
     assert "Coral reefs and conference coverage featuring Dr Jodie Rummer" in titles
     assert "Professor Jodie Rummer on ocean warming and the Great Barrier Reef" in titles
     assert "Dr Jodie Rummer warns shark culling will not address risks" in titles
     assert "Dr Jodie Rummer discusses shark populations and culling on Breakfast" in titles
+
+
+def test_custom_media_uses_public_canonical_urls():
+    """Manual public media entries should avoid tracking params and private players."""
+    tracking_params = {"btr", "giftid", "utm_source", "utm_medium", "utm_campaign"}
+    for item in CUSTOM_MEDIA_ADDITIONS:
+        url = item["url"].lower()
+        assert "app.mediaportal.com" not in url
+        assert not any(f"{param}=" in url for param in tracking_params)
 
 
 def test_fetch_all_news_preserves_custom_media_without_urls(monkeypatch):
