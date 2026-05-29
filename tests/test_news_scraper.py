@@ -426,6 +426,22 @@ def test_custom_media_includes_may_2026_print_placements():
     assert "Cairns man identified as shark attack victim" in print_titles
 
 
+def test_custom_media_includes_may_2026_online_media_summary():
+    """Custom additions include the curated May 2026 online media-monitoring placements."""
+    online_titles = {
+        a["title"] for a in CUSTOM_MEDIA_ADDITIONS if "online" in (a.get("keywords") or [])
+    }
+    assert "Shark Attack Claims Life of Queensland Spearfisher" in online_titles
+    assert (
+        "Pictured: Spearfisher tragically killed in horrific shark attack near Queensland's Great Barrier Reef"
+        in online_titles
+    )
+    assert (
+        "Pictured: Spearfisher tragically killed in horrific shark attack on Queensland's Great Barrier Reef"
+        in online_titles
+    )
+
+
 def test_custom_media_includes_forwarded_media_monitoring_tasks():
     """Forwarded Gmail media tasks are preserved as curated media additions."""
     titles = {a["title"] for a in CUSTOM_MEDIA_ADDITIONS}
