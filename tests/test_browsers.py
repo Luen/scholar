@@ -3,27 +3,25 @@
 import pytest
 
 
-def _load_stealthy_fetcher():
+def test_scrapling_static_fetcher_import():
+    """Test that Scrapling's static fetcher can be imported."""
     try:
-        from scrapling.fetchers import StealthyFetcher
+        from scrapling.fetchers import FetcherSession
     except ImportError as e:
         pytest.skip(f"Scrapling fetchers not installed: {e}")
-    return StealthyFetcher
-
-
-def test_scrapling_import():
-    """Test that Scrapling fetchers can be imported."""
-    stealthy_fetcher = _load_stealthy_fetcher()
-    assert stealthy_fetcher is not None
+    assert FetcherSession is not None
 
 
 @pytest.mark.integration
 def test_scrapling_fetch_optional():
     """Optional: test that Scrapling can fetch a simple page (skip if no browser)."""
-    stealthy_fetcher = _load_stealthy_fetcher()
+    try:
+        from scrapling.fetchers import StealthyFetcher
+    except Exception as e:
+        pytest.skip(f"Scrapling browser fetcher not available: {e}")
 
     try:
-        page = stealthy_fetcher.fetch(
+        page = StealthyFetcher.fetch(
             "https://example.com",
             headless=True,
             timeout=15000,
