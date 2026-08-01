@@ -179,6 +179,9 @@ def _get_html_from_scrapling_response(page) -> str | None:
         if hasattr(page, "body") and page.body is not None:
             encoding = getattr(page, "encoding", None) or "utf-8"
             return page.body.decode(encoding, errors="replace")
+        text = getattr(page, "text", None)
+        if isinstance(text, str):
+            return text
         if hasattr(page, "html"):
             return page.html
         if hasattr(page, "root") and page.root is not None:
@@ -190,9 +193,60 @@ def _get_html_from_scrapling_response(page) -> str | None:
     return None
 
 
+def _fetch_html_with_stealthy_fetcher(url: str) -> str | None:
+    """Fetch HTML with Scrapling's browser engine when it is usable."""
+    try:
+        from scrapling.fetchers import StealthyFetcher
+    except ImportError:
+        print_misc("[ERROR] Scrapling fetchers not available; run: pip install scrapling[fetchers]")
+        return None
+    except Exception as e:
+        print_misc(f"[WARN] Scrapling browser fetcher unavailable: {e}")
+        return None
+
+    try:
+        page = StealthyFetcher.fetch(url, headless=True, timeout=60000)
+        return _get_html_from_scrapling_response(page)
+    except Exception as e:
+        print_misc(f"[WARN] Scrapling browser fetch failed: {e}")
+        return None
+
+
+def _fetch_html_with_fetcher_session(url: str) -> str | None:
+    """Fetch HTML with Scrapling's static engine as a lightweight fallback."""
+    try:
+        from scrapling.fetchers import FetcherSession
+    except ImportError:
+        print_misc("[ERROR] Scrapling fetchers not available; run: pip install scrapling[fetchers]")
+        return None
+    except Exception as e:
+        print_misc(f"[ERROR] Scrapling static fetcher unavailable: {e}")
+        return None
+
+    try:
+        with FetcherSession(
+            impersonate="chrome",
+            timeout=60,
+            stealthy_headers=True,
+            follow_redirects=True,
+            retries=2,
+            retry_delay=1,
+            verify=True,
+        ) as session:
+            response = session.get(url)
+        status_code = int(getattr(response, "status_code", 0) or 0)
+        if status_code and not 200 <= status_code < 400:
+            print_misc(f"[WARN] Scrapling static fetch returned status {status_code} for {url}")
+            return None
+        return _get_html_from_scrapling_response(response)
+    except Exception as e:
+        print_misc(f"[ERROR] Scrapling static fetch failed: {e}")
+        return None
+
+
 @lru_cache(maxsize=1000)
 def get_url_content_using_scrapling(url):
-    """Fetch the HTML content using Scrapling (headless browser) when requests fails."""
+    """Fetch HTML content using Scrapling when plain requests fail."""
 
     domain = urlparse(url).hostname
     if domain in last_scraped and time.time() - last_scraped[domain] < 30:
@@ -212,21 +266,10 @@ def get_url_content_using_scrapling(url):
                 print_error(f"Error downloading PDF: {e}")
                 return None
 
-        try:
-            from scrapling.fetchers import StealthyFetcher
-
-            page = StealthyFetcher.fetch(url, headless=True, timeout=60000)
-            html = _get_html_from_scrapling_response(page)
-            if html:
-                return html
-        except ImportError:
-            print_misc(
-                "[ERROR] Scrapling fetchers not available; run: pip install scrapling[fetchers]"
-            )
-            return None
-        except Exception as e:
-            print_misc(f"[ERROR] Scrapling fetch failed: {e}")
-            return None
+        html = _fetch_html_with_stealthy_fetcher(url)
+        if html:
+            return html
+        return _fetch_html_with_fetcher_session(url)
     except Exception as e:
         print_misc(f"[ERROR] An error occurred in get_url_content_using_scrapling: {e}")
         return None

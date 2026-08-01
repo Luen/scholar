@@ -3,6 +3,15 @@
 import pytest
 
 
+def test_scrapling_static_fetcher_import():
+    """Test that Scrapling's static fetcher can be imported."""
+    try:
+        from scrapling.fetchers import FetcherSession
+    except ImportError as e:
+        pytest.skip(f"Scrapling fetchers not installed: {e}")
+    assert FetcherSession is not None
+
+
 def _stealthy_fetcher_or_skip():
     """Return Scrapling's stealth browser fetcher when the optional stack is usable."""
     try:
@@ -14,8 +23,8 @@ def _stealthy_fetcher_or_skip():
     return StealthyFetcher
 
 
-def test_scrapling_import():
-    """Test that Scrapling fetchers can be imported."""
+def test_scrapling_browser_fetcher_import():
+    """Test that Scrapling's optional browser fetcher can be imported."""
     stealthy_fetcher = _stealthy_fetcher_or_skip()
     assert stealthy_fetcher is not None
 
