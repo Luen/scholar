@@ -13,6 +13,8 @@ pytz>=2026.3.post1
 pdfplumber>=0.11.9
 googlesearch-python>=1.3.0
 scrapling[fetchers]>=0.4
+# browserforge 1.2.4 cannot generate Scrapling headers with 0.14.0 datapoints.
+apify_fingerprint_datapoints<0.14
 newspaper4k>=0.9.3.1
 gnews>=0.8.2
 ruff>=0.15.20
