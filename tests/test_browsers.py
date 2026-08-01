@@ -6,8 +6,8 @@ import pytest
 def _load_stealthy_fetcher():
     try:
         from scrapling.fetchers import StealthyFetcher
-    except Exception as e:
-        pytest.skip(f"Scrapling fetchers not available: {e}")
+    except ImportError as e:
+        pytest.skip(f"Scrapling fetchers not installed: {e}")
     return StealthyFetcher
 
 
