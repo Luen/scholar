@@ -1,33 +1,51 @@
-# Large data directories (mounted at runtime via docker-compose)
+# Runtime data (compose volumes)
 scholar_data/
 cache/
 downloaded_files/
 
-# Git and IDE
+# VCS / IDE / editor
 .git/
 .gitignore
+.gitattributes
+.github/
 .vscode/
+.cursor/
 .idea/
 
-# Python
+# Python caches / venvs
 __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
 *.egg-info/
 .eggs/
 venv/
 .venv/
 
-# Logs and temp
+# Logs / temp
 *.log
 src/logs/
 
-# Env (use env_file in compose)
+# Env & secrets (mounted at runtime)
 .env
+.env.*
+.env.template
+google-credentials.json
+*.pem
+*.key
 
-# Docs and tests (not needed in production image)
+# Docs / tests / non-runtime
 docs/
 *.md
-!README.md
+tests/
+cron.sh
+
+# Docker meta (not needed inside image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+base/
+web/
+cron/

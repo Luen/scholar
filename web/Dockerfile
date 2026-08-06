@@ -1,19 +1,19 @@
-# Build from base image
+# syntax=docker/dockerfile:1
+# Requires scholar-base:latest (build base/Dockerfile first — see docker-compose.yml).
 FROM scholar-base:latest
 
-# Ensure gunicorn is available in this image even if `scholar-base:latest` was built from an
-# older requirements.txt (e.g. compose built web before base finished). `pip` is a no-op when
-# already satisfied. Use `python -m gunicorn` so we do not rely on the script being on PATH.
-RUN pip install --no-cache-dir "gunicorn>=23.0.0"
+WORKDIR /app
 
-# Copy application code
+# gunicorn is already in requirements.txt; keep a no-op-safe pin for stale base images.
+RUN pip install --no-cache-dir --root-user-action=ignore "gunicorn>=23.0.0"
+
 COPY --chown=app_user:app_user . .
 
-# Switch to non-root user
 USER app_user
 
-# Expose the port for Flask application
 EXPOSE 5000
 
-# Production WSGI (avoids Flask's built-in dev server warning and is suitable behind Docker)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://127.0.0.1:5000/health || exit 1
+
 CMD ["python", "-m", "gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "server:app"]
