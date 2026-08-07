@@ -15,11 +15,6 @@ services:
         env_file: .env
         environment:
             - PYTHONUNBUFFERED=1
-            - PUBLIC_API_BASE_URL=https://api.rummerlab.com
-            - NEWS_API_ORG_KEY=${NEWS_API_ORG_KEY}
-            - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-            - GOOGLE_CX_ID=${GOOGLE_CX_ID}
-            - THE_GUARDIAN_API_KEY=${THE_GUARDIAN_API_KEY}
         ports:
             - '8000:5000'
         volumes:
@@ -47,11 +42,6 @@ services:
         env_file: .env
         environment:
             - PYTHONUNBUFFERED=1
-            - PUBLIC_API_BASE_URL=https://api.rummerlab.com
-            - NEWS_API_ORG_KEY=${NEWS_API_ORG_KEY}
-            - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-            - GOOGLE_CX_ID=${GOOGLE_CX_ID}
-            - THE_GUARDIAN_API_KEY=${THE_GUARDIAN_API_KEY}
         volumes:
             - scholar_data:/app/scholar_data
             - cache:/app/cache

@@ -19,11 +19,9 @@ RUN touch /var/log/app.log \
     && chown app_user:app_user /var/log/app.log \
     && mkdir -p /app/logs \
     && chown -R app_user:app_user /app/logs \
-    && printf '%s\n%s\n%s\n%s\n' \
+    && printf '%s\n%s\n' \
         "0 0 * * * cd /app && python -u main.py ynWS968AAAAJ >> /var/log/app.log 2>&1 && python -u main.py g9B1IoQAAAAJ >> /var/log/app.log 2>&1 && python -u main.py cXDRggIAAAAJ >> /var/log/app.log 2>&1" \
         "0 2 * * * cd /app && python -u scripts/revalidate_doi_metrics.py >> /var/log/app.log 2>&1" \
-        "0 5 * * * cd /app && python -u main.py ynWS968AAAAJ --refresh-news >> /var/log/app.log 2>&1 && python -u main.py g9B1IoQAAAAJ --refresh-news >> /var/log/app.log 2>&1 && python -u main.py cXDRggIAAAAJ --refresh-news >> /var/log/app.log 2>&1" \
-        "0 12 * * * cd /app && python -u main.py ynWS968AAAAJ --bake-media-filtered >> /var/log/app.log 2>&1 && python -u main.py g9B1IoQAAAAJ --bake-media-filtered >> /var/log/app.log 2>&1 && python -u main.py cXDRggIAAAAJ --bake-media-filtered >> /var/log/app.log 2>&1" \
         > /etc/cron.d/scholar_cron \
     && chmod 0644 /etc/cron.d/scholar_cron \
     && crontab -u app_user /etc/cron.d/scholar_cron

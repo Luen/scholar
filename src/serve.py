@@ -7,12 +7,11 @@ from datetime import datetime
 from email.utils import formatdate
 from pathlib import Path
 
-from flask import Flask, jsonify, make_response, request, send_file, send_from_directory
+from flask import Flask, jsonify, make_response, request, send_from_directory
 
 import src.cache_config  # noqa: F401 - configure HTTP cache before requests
 
 from .doi_utils import normalize_doi
-from .news_filters import filter_media_items
 from .scholar_citations import (
     fetch_altmetric_score,
     fetch_crossref_for_api,
@@ -20,9 +19,6 @@ from .scholar_citations import (
 )
 
 logger = logging.getLogger(__name__)
-
-# One warning per scholar ID per process when /news falls back to live filtering (no media_filtered).
-_legacy_news_filter_warned: set[str] = set()
 
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False  # Preserve key order: doi first, then citations/score
@@ -32,16 +28,6 @@ SCHOLAR_DATA_DIR_ABS = os.path.abspath(SCHOLAR_DATA_DIR)
 
 # HTTP cache: clients revalidate after 1 day to pick up citation/score updates
 DOI_CACHE_MAX_AGE = 86400  # 1 day
-NEWS_FIELD_NAMES = ("media", "media_filtered", "media_filtered_at")
-
-_THUMB_NAME_RE = re.compile(r"^[a-f0-9]{64}\.(?:jpe?g|png|gif|webp)$", re.IGNORECASE)
-_THUMB_MIMETYPE = {
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".png": "image/png",
-    ".gif": "image/gif",
-    ".webp": "image/webp",
-}
 
 
 def _validated_scholar_id(scholar_id: str) -> str | None:
@@ -65,12 +51,6 @@ def _scholar_data_path_for_id(scholar_id: str) -> Path | None:
         return None
 
 
-def _scholar_file_path(scholar_id: str) -> str | None:
-    """Return safe path to scholar JSON file, or None if invalid."""
-    p = _scholar_data_path_for_id(scholar_id)
-    return str(p) if p else None
-
-
 def _load_scholar_data_or_error(scholar_id: str):
     """
     Load scholar JSON data from disk.
@@ -89,38 +69,6 @@ def _load_scholar_data_or_error(scholar_id: str):
         return None, ({"error": "Author not found"}, 404)
     except json.JSONDecodeError:
         return None, ({"error": "Invalid scholar data"}, 500)
-
-
-def _served_media_items(author: dict, scholar_id: str | None = None) -> list[dict]:
-    """
-    Return media rows for the public /news API.
-
-    Prefer ``media_filtered`` written by ``main.py`` after ``filter_media_items`` so
-    HTTP requests do not re-run URL checks on every API call. Legacy JSON without that
-    key falls back to filtering ``media`` on read.
-    """
-    precooked = author.get("media_filtered")
-    if isinstance(precooked, list):
-        return precooked
-    raw_media = author.get("media")
-    if not isinstance(raw_media, list) or not raw_media:
-        return []
-    if scholar_id and scholar_id not in _legacy_news_filter_warned:
-        _legacy_news_filter_warned.add(scholar_id)
-        logger.warning(
-            "Scholar %s: JSON has no media_filtered list; /news is filtering media on each "
-            "request (slow, may fetch article URLs). Run: python -u main.py %s "
-            "--bake-media-filtered (or a full main.py run / wait for cron).",
-            scholar_id,
-            scholar_id,
-        )
-    return filter_media_items(raw_media)
-
-
-def _drop_news_fields(data: dict) -> None:
-    """Remove raw and pre-filtered news fields from a response payload."""
-    for field in NEWS_FIELD_NAMES:
-        data.pop(field, None)
 
 
 def _parse_pagination_args(
@@ -189,9 +137,6 @@ def get_scholar(id):
         return jsonify(data)
 
     parts = {p.strip().lower() for p in parts_raw.split(",") if p.strip()}
-    # NOTE: news/media must be fetched via /scholar/<id>/news (do not support parts=news).
-    if "news" in parts or "media" in parts:
-        return jsonify({"error": "News must be fetched via /scholar/<id>/news"}), 400
 
     allowed = {"profile", "publications", "pubs", "all"}
     if not parts.issubset(allowed):
@@ -210,68 +155,16 @@ def get_scholar(id):
         profile = dict(data)
         if "publications" not in parts and "pubs" not in parts:
             profile.pop("publications", None)
-        # Always exclude news from /scholar/<id> parts mode; use /news endpoint.
-        _drop_news_fields(profile)
         result["profile"] = profile
 
     return jsonify(result)
-
-
-@app.route("/scholar/<id>/news", methods=["GET"])
-def get_scholar_news(id):
-    """Get scholar news/media items only."""
-    data, err = _load_scholar_data_or_error(id)
-    if err:
-        body, status = err
-        return jsonify(body), status
-
-    items = _served_media_items(data, scholar_id=id)
-    page = _parse_pagination_args(default_limit=25, max_limit=200)
-    if page[0] is None:
-        return jsonify(page[1]), 400
-    limit, offset = page
-    sliced = items[offset : offset + limit]
-    body: dict = {
-        "id": id,
-        "total": len(items),
-        "limit": limit,
-        "offset": offset,
-        "media": sliced,
-    }
-    fat = data.get("media_filtered_at")
-    if isinstance(data.get("media_filtered"), list) and isinstance(fat, str) and fat.strip():
-        body["filtered_at"] = fat.strip()
-    return jsonify(body)
-
-
-@app.route("/scholar/<id>/news/thumbnail/<filename>", methods=["GET"])
-def get_news_thumbnail(id, filename):
-    """Serve a precomputed news article thumbnail from disk (see ``news_thumbnails``)."""
-    vid = _validated_scholar_id(id)
-    if not vid:
-        return jsonify({"error": "Invalid id"}), 400
-    if not _THUMB_NAME_RE.match(filename):
-        return jsonify({"error": "Invalid filename"}), 400
-    try:
-        base = Path(SCHOLAR_DATA_DIR_ABS).resolve()
-        thumb_root = (base / "news_thumbnails" / vid).resolve()
-        thumb_root.relative_to(base)
-        real_path = (thumb_root / filename).resolve()
-        real_path.relative_to(thumb_root)
-    except (ValueError, OSError):
-        return jsonify({"error": "Not found"}), 404
-    if not real_path.is_file():
-        return "", 404
-    ext = real_path.suffix.lower()
-    mimetype = _THUMB_MIMETYPE.get(ext, "application/octet-stream")
-    return send_file(str(real_path), mimetype=mimetype, max_age=86400 * 30)
 
 
 @app.route("/scholar/<id>/gscholar", methods=["GET"])
 def get_scholar_gscholar(id):
     """
     Get the Google-Scholar-derived profile data without large sub-resources.
-    By default this excludes `publications` and news fields to keep the payload cache-friendly.
+    By default this excludes `publications` to keep the payload cache-friendly.
     """
     data, err = _load_scholar_data_or_error(id)
     if err:
@@ -279,13 +172,10 @@ def get_scholar_gscholar(id):
         return jsonify(body), status
 
     include_publications = request.args.get("include_publications") == "1"
-    include_news = request.args.get("include_news") == "1"
 
     result = dict(data)
     if not include_publications:
         result.pop("publications", None)
-    if not include_news:
-        _drop_news_fields(result)
     return jsonify(result)
 
 

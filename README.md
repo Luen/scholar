@@ -4,8 +4,9 @@ This project uses a home server cronjob to scrape [Google Scholar](https://schol
 
 The JSON can then be used, for example, by uploading the data to a publicly accessible server via Secure Copy (SCP) or rsync, which serves the JSON data via a Flask application.
 
-[Meltwater](https://www.meltwater.com/) is the news gathering tool used by some universities. See also Isentia Medaiportal.
-See also [Zotera](https://www.zotero.org/), an [open source citation manager](https://github.com/zotero/zotero).
+News and media coverage for the lab site lives in [rummerlab-website `data/media.ts`](https://github.com/RummerLab/rummerlab-website/blob/main/data/media.ts) — this API no longer scrapes or serves news/media.
+
+See also [Zotero](https://www.zotero.org/), an [open source citation manager](https://github.com/zotero/zotero).
 
 `python -m venv scholar && source scholar/bin/activate`
 
@@ -44,29 +45,7 @@ The stack includes:
 - **web** – Gunicorn + Flask API serving scholar data
 - **cron** – Runs the main scraper and DOI metrics revalidation on a schedule
 
-**Cron schedule** (in `cron/Dockerfile`): full scholar pipeline (`python -u main.py <id>`) at **00:00 daily**; DOI metrics revalidation at **02:00 daily**; **`--refresh-news`** (fetch RSS/APIs, then filter + thumbnails) at **05:00 daily**; **`--bake-media-filtered`** (recompute filters/thumbnails from on-disk `media` only) at **12:00 daily** — each for the three scholar IDs in that file.
-
-After each successful `main.py` run, the pipeline writes **`media_filtered`** (and `media_filtered_at`) into the same `scholar_data/<id>.json` file. The `/scholar/<id>/news` API **serves that list** when present, so it does not re-run per-URL Scrapling on every HTTP request. If **`media_filtered` is missing** (new volume, old JSON, or cron has not written it yet), the API **re-runs `filter_media_items` on every `/news` request**, which can take many seconds and will log Scrapling fetches (e.g. Guardian, The Conversation) for rows that are not kept by strict snippet rules alone. **Fix:** run **`--bake-media-filtered`** or **`--refresh-news`** once per ID (see below), or wait for the daily cron job.
-
-Older JSON without `media_filtered` still filter on read; items whose **title/description/content already match** Dr Jodie Rummer (strict rules) are kept **without** fetching each URL, which shortens but does not eliminate on-request work for noisy sources.
-
-**Lightweight jobs (no Scholar scrape, `last_fetched` unchanged):**
-
-- **`--bake-media-filtered`** — recompute `media_filtered`, timestamps, and thumbnails from the existing `media` array on disk (e.g. after filter logic changes).
-
-```bash
-python main.py ynWS968AAAAJ --bake-media-filtered
-docker compose exec cron python main.py ynWS968AAAAJ --bake-media-filtered
-```
-
-- **`--refresh-news`** — fetch fresh news/media via RSS/APIs (`get_news_data`), then filter + thumbnails, then save.
-
-```bash
-python main.py ynWS968AAAAJ --refresh-news
-docker compose exec cron python main.py ynWS968AAAAJ --refresh-news
-```
-
-For items whose **`image.url`** is already a remote ``https://`` link from a feed or API (YouTube, Facebook, etc.), the same pipeline **downloads** it to `scholar_data/news_thumbnails/<scholar_id>/` and rewrites `image.url` to the Flask route **`GET /scholar/<id>/news/thumbnail/<sha256>.<ext>`** (hash of the **image** URL). For items with **no** `image.url`, **`main.py`** (full run, `--refresh-news`, or `--bake-media-filtered`) tries **og:image** / Twitter card images on the article page (hash of the **article** URL). With **`PUBLIC_API_BASE_URL`**, JSON can store absolute thumbnail URLs. Optional env: `NEWS_THUMB_MAX_BYTES`, `NEWS_THUMB_FETCH_DELAY_SECONDS` (see `.env.template`). **Backfill:** downloads run during those commands, not when `/news` is read. Ensure the same `scholar_data` volume is visible to both **cron** and **web** so image files exist where the API serves them.
+**Cron schedule** (in `cron/Dockerfile`): full scholar pipeline (`python -u main.py <id>`) at **00:00 daily**; DOI metrics revalidation at **02:00 daily** — each for the three scholar IDs in that file.
 
 Build the base image first (web and cron use it; the base container exits immediately):
 
@@ -83,13 +62,13 @@ docker compose up -d
 # or, to (re)build everything: docker compose build base && docker compose up -d --build
 ```
 
-**Typical home-server update** after pulling code (rebuild containers, recompute news filters for the default scholar ID, then follow logs; `Ctrl+C` stops log follow only):
+**Typical home-server update** after pulling code (rebuild containers, then follow logs; `Ctrl+C` stops log follow only):
 
 ```bash
-git pull; docker compose up -d --build; docker compose exec cron python -u main.py ynWS968AAAAJ --bake-media-filtered; docker compose logs -f
+git pull; docker compose up -d --build; docker compose logs -f
 ```
 
-For browser-based DOI fetching on sites that block plain HTTP, the project uses [Scrapling](https://github.com/D4Vinci/Scrapling). Install browser dependencies with `scrapling install` if you use that path. News aggregation uses RSS, [NewsAPI](https://newsapi.org/), the Guardian API, [Newspaper4k](https://github.com/AndyTheFactory/newspaper4k), and other sources.
+For browser-based DOI fetching on sites that block plain HTTP, the project uses [Scrapling](https://github.com/D4Vinci/Scrapling). Install browser dependencies with `scrapling install` if you use that path.
 
 ### Caching
 
@@ -101,16 +80,6 @@ HTTP responses are cached with [requests-cache](https://requests-cache.readthedo
 - Web page fetches for DOI extraction
 
 Set `CACHE_DIR` to change the cache location; `CACHE_EXPIRE_SECONDS` (default: 30 days) to control expiry.
-
-### Slow `/scholar/<id>/news` or Scrapling in web logs
-
-The **web** container only reads `scholar_data/<id>.json`. If that file has **`media` but no `media_filtered`**, every news request re-filters and may hit article URLs (Scrapling). After a fresh deploy or new Docker volume, bake once:
-
-```bash
-docker compose exec cron python -u main.py ynWS968AAAAJ --bake-media-filtered
-```
-
-Repeat for each scholar ID. Confirm the JSON contains a `media_filtered` array (and optional `media_filtered_at`). The API logs a **one-time warning per worker** when this fallback path is used.
 
 Wait for containers to be ready (check status with `docker compose ps`). Then to manually run the script:
 
@@ -226,7 +195,7 @@ Neither phase uses `force_refresh`, so if a request is blocked you keep existing
 
 ## Project structure
 
-- `main.py` – Full scrape, idempotency, **`--bake-media-filtered`**, **`--refresh-news`** (skips previously indexed `media_filtered` URLs during fresh news fetch)
+- `main.py` – Full Scholar scrape with DOI enrichment and idempotency (`last_fetched`)
 - `src/scholar_fetcher.py` – Author, coauthors, publications from scholarly (with retries)
 - `src/doi_resolver.py` – DOI lookup and resolution (with retries)
 - `src/output.py` – Load/save JSON, `schema_version`, `last_fetched`, resume indices
@@ -299,4 +268,3 @@ python server.py
 - `MAX_RETRIES`, `RETRY_BASE_DELAY` – Retry settings for Scholar/DOI APIs
 - `COAUTHOR_DELAY`, `PUBLICATION_DELAY` – Rate limiting (seconds)
 - `LOG_FORMAT` – Set to `json` for structured JSON logs (e.g. in Docker)
-- `NEWS_API_ORG_KEY`, `THE_GUARDIAN_API_KEY` – For news aggregation (see `.env.template`)
