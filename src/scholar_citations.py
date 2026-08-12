@@ -26,6 +26,7 @@ from .crossref import (
     get_crossref_works_response,
 )
 from .doi_utils import normalize_doi
+from .path_safety import safe_path_under
 from .proxy_config import get_request_proxy_chain, get_request_proxy_chain_summary
 
 logger = logging.getLogger(__name__)
@@ -86,10 +87,6 @@ if not CACHE_DIR:
     CACHE_DIR = os.path.join(base, "doi_metrics")
 
 
-def _doi_metrics_cache_root() -> Path:
-    return Path(CACHE_DIR).resolve()
-
-
 _CACHE_SAFE_STEM_PATTERN = r"[A-Za-z0-9_.%~()+,;-]+"
 _CACHE_SAFE_STEM_RE = re.compile(rf"^{_CACHE_SAFE_STEM_PATTERN}$")
 _CACHE_JSON_BASENAME_RE = re.compile(
@@ -110,26 +107,14 @@ def _doi_metrics_cache_file(doi: str, prefix: str) -> Path | None:
     if not _CACHE_JSON_BASENAME_RE.match(name):
         return None
     os.makedirs(CACHE_DIR, exist_ok=True)
-    try:
-        base = _doi_metrics_cache_root()
-        p = (base / name).resolve()
-        p.relative_to(base)
-        return p
-    except (ValueError, OSError):
-        return None
+    return safe_path_under(CACHE_DIR, name)
 
 
 def _listdir_cache_json_path(name: str) -> Path | None:
     """Resolve ``name`` under the DOI metrics cache root if it is a valid cache basename."""
     if not _CACHE_JSON_BASENAME_RE.match(name):
         return None
-    try:
-        base = _doi_metrics_cache_root()
-        p = (base / name).resolve()
-        p.relative_to(base)
-        return p
-    except (ValueError, OSError):
-        return None
+    return safe_path_under(CACHE_DIR, name)
 
 
 def _normalize_doi_for_cache(doi: str) -> str:

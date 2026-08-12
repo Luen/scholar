@@ -228,6 +228,10 @@ Tests marked `integration` require network access. Tests that need `google-crede
 ruff check . && ruff format --check .
 ```
 
+### Security scanning
+
+GitHub [CodeQL](https://codeql.github.com/) runs on pushes and pull requests (`.github/workflows/codeql.yml`). Keep secrets out of git: `.env` and `google-credentials.json` are gitignored — use `.env.template` as the template only.
+
 ## Starting the API server
 
 **Docker (production-style):** the `web` image starts **[Gunicorn](https://docs.gunicorn.org/)** (`server:app`), not Flask’s development server. Access logs and errors go to stdout/stderr for `docker compose logs`.

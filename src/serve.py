@@ -12,6 +12,7 @@ from flask import Flask, jsonify, make_response, request, send_from_directory
 import src.cache_config  # noqa: F401 - configure HTTP cache before requests
 
 from .doi_utils import normalize_doi
+from .path_safety import safe_path_under
 from .scholar_citations import (
     fetch_altmetric_score,
     fetch_crossref_for_api,
@@ -42,13 +43,7 @@ def _scholar_data_path_for_id(scholar_id: str) -> Path | None:
     vid = _validated_scholar_id(scholar_id)
     if not vid:
         return None
-    try:
-        base = Path(SCHOLAR_DATA_DIR_ABS).resolve()
-        candidate = (base / f"{vid}.json").resolve()
-        candidate.relative_to(base)
-        return candidate
-    except (ValueError, OSError):
-        return None
+    return safe_path_under(SCHOLAR_DATA_DIR_ABS, f"{vid}.json")
 
 
 def _load_scholar_data_or_error(scholar_id: str):
