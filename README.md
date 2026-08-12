@@ -230,7 +230,7 @@ ruff check . && ruff format --check .
 
 ### Security scanning
 
-GitHub [CodeQL](https://codeql.github.com/) runs on pushes and pull requests (`.github/workflows/codeql.yml`). Keep secrets out of git: `.env` and `google-credentials.json` are gitignored — use `.env.template` as the template only.
+GitHub CodeQL default setup is enabled for this repo. Ensure **Python** is included under Settings → Code security → CodeQL analysis (Actions alone will not cover these path-injection findings). Keep secrets out of git: `.env` and `google-credentials.json` are gitignored — use `.env.template` as the template only.
 
 ## Starting the API server
 
