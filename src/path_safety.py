@@ -34,6 +34,9 @@ def safe_path_under(base_dir: str | os.PathLike[str], *parts: str) -> Path | Non
 
     base = os.path.realpath(os.fspath(base_dir))
     candidate = os.path.realpath(os.path.join(base, *clean_parts))
-    if candidate == base or candidate.startswith(base + os.sep):
+    # Roots already end with sep (`/` or `C:\`); appending again yields `//` / `C:\\`
+    # and breaks startswith for every child path.
+    base_prefix = base if base.endswith(os.sep) else base + os.sep
+    if candidate == base or candidate.startswith(base_prefix):
         return Path(candidate)
     return None

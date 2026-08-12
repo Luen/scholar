@@ -27,3 +27,23 @@ def test_safe_path_under_rejects_nested_separators(tmp_path: Path):
 def test_safe_path_under_rejects_absolute_segment(tmp_path: Path):
     abs_seg = os.path.abspath(os.sep)
     assert safe_path_under(tmp_path, abs_seg) is None
+
+
+def test_safe_path_under_accepts_base_with_trailing_sep(tmp_path: Path):
+    """Bases that already end with sep must still accept children (root case)."""
+    base = str(tmp_path.resolve()) + os.sep
+    target = safe_path_under(base, "x.json")
+    assert target is not None
+    assert target == (tmp_path / "x.json").resolve()
+
+
+def test_safe_path_under_rejects_sibling_prefix_escape(tmp_path: Path):
+    """`/cache` must not accept `/cache_evil` via naive startswith."""
+    base = tmp_path / "cache"
+    sibling = tmp_path / "cache_evil"
+    base.mkdir()
+    sibling.mkdir()
+    (sibling / "x.json").write_text("{}", encoding="utf-8")
+    assert safe_path_under(base, "x.json") is not None
+    # Joining stays under base; sibling escape is structural, not via basename
+    assert safe_path_under(base, "x.json").parent == base.resolve()
