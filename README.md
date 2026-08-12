@@ -209,6 +209,8 @@ Output JSON includes `schema_version`, `last_fetched`, and `_last_successful_*_i
 
 ## Development
 
+Coding agents should follow [`AGENTS.md`](AGENTS.md) ([format](https://agents.md/)).
+
 ### Linting and formatting
 
 This project uses [Ruff](https://docs.astral.sh/ruff/) for linting and formatting. Run after code changes:
