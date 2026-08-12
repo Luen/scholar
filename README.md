@@ -30,6 +30,8 @@ See also [Zotero](https://www.zotero.org/), an [open source citation manager](ht
     python -m venv scholar
     source scholar/bin/activate
     pip install -r requirements.txt
+    # Optional: lint + test tools
+    pip install -r requirements-dev.txt
     ```
 
 4. Test run.
@@ -218,7 +220,7 @@ ruff check . --fix && ruff format .
 ### Testing
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
@@ -227,6 +229,10 @@ Tests marked `integration` require network access. Tests that need `google-crede
 ```bash
 ruff check . && ruff format --check .
 ```
+
+### Security scanning
+
+GitHub CodeQL default setup is enabled for this repo. Ensure **Python** is included under Settings → Code security → CodeQL analysis (Actions alone will not cover these path-injection findings). Keep secrets out of git: `.env` and `google-credentials.json` are gitignored — use `.env.template` as the template only.
 
 ## Starting the API server
 

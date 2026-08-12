@@ -1,0 +1,4 @@
+# Local development / CI: lint + tests (includes runtime deps).
+-r requirements.txt
+ruff>=0.16.2
+pytest>=9.1.1

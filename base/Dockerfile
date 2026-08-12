@@ -30,11 +30,8 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-# Skip lint/test tools in runtime images (still listed in requirements.txt for local/CI)
 RUN python -m pip install --upgrade pip \
-    && grep -vE '^(ruff|pytest)([<>=!~].*)?$' requirements.txt > /tmp/requirements.prod.txt \
-    && pip install --no-cache-dir -r /tmp/requirements.prod.txt \
-    && rm -f /tmp/requirements.prod.txt
+    && pip install --no-cache-dir -r requirements.txt
 
 RUN mkdir -p /app/scholar_data /app/cache /var/log \
     && chown -R app_user:app_user /app /var/log
