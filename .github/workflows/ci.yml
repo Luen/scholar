@@ -21,8 +21,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install ruff
-        run: pip install ruff
+      - name: Install lint dependencies
+        run: pip install -r requirements-dev.txt
 
       - name: Lint
         run: ruff check .
@@ -42,7 +42,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest
+        run: pip install -r requirements-dev.txt
 
       - name: Configure requests cache
         run: mkdir -p cache

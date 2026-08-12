@@ -30,6 +30,8 @@ See also [Zotero](https://www.zotero.org/), an [open source citation manager](ht
     python -m venv scholar
     source scholar/bin/activate
     pip install -r requirements.txt
+    # Optional: lint + test tools
+    pip install -r requirements-dev.txt
     ```
 
 4. Test run.
@@ -218,7 +220,7 @@ ruff check . --fix && ruff format .
 ### Testing
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
