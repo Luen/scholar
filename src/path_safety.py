@@ -19,14 +19,21 @@ def safe_path_under(base_dir: str | os.PathLike[str], *parts: str) -> Path | Non
     Each part must be a single path segment (no separators, no ``..``).
     Returns ``None`` on traversal / escape attempts.
     """
+    clean_parts: list[str] = []
     for part in parts:
         if not part or part in (".", "..") or os.path.isabs(part):
             return None
-        if os.sep in part or "/" in part or (os.altsep is not None and os.altsep in part):
+        # Reject / and \\ on all platforms (os.altsep is None on POSIX).
+        if "/" in part or "\\" in part:
             return None
+        # CodeQL-modeled sanitizer: basename strips any remaining dir components.
+        name = os.path.basename(part)
+        if name != part or not name or name in (".", ".."):
+            return None
+        clean_parts.append(name)
 
     base = os.path.realpath(os.fspath(base_dir))
-    candidate = os.path.realpath(os.path.join(base, *parts))
+    candidate = os.path.realpath(os.path.join(base, *clean_parts))
     if candidate == base or candidate.startswith(base + os.sep):
         return Path(candidate)
     return None

@@ -19,7 +19,9 @@ def test_safe_path_under_rejects_parent_segment(tmp_path: Path):
 
 def test_safe_path_under_rejects_nested_separators(tmp_path: Path):
     assert safe_path_under(tmp_path, "a/b.json") is None
+    # Backslash must be rejected on Linux too (not only when os.altsep is set).
     assert safe_path_under(tmp_path, "a\\b.json") is None
+    assert safe_path_under(tmp_path, r"a\b.json") is None
 
 
 def test_safe_path_under_rejects_absolute_segment(tmp_path: Path):

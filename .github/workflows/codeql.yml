@@ -1,5 +1,3 @@
-"""CodeQL analysis for Python path-injection and related findings."""
-
 name: CodeQL
 
 on:
