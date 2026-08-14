@@ -74,3 +74,11 @@ Treat `AGENTS.md` as living agent docs (replaces former `.cursor/rules/*.mdc`):
 - Add guidance when recurring patterns, tooling, or pitfalls emerge
 - Update when standards change; remove redundant or conflicting text
 - Keep sections focused and actionable; prefer concrete commands over vague advice
+
+
+## Pull requests
+
+Before merging any pull request:
+
+1. **Read all comments** on the PR — conversation comments, review comments (including those on specific lines), and bot comments. Address or acknowledge them. Do not merge while review feedback is unresolved.
+2. **Wait for CI to complete successfully.** GitHub Actions (and other required checks) on the PR must finish and pass. Do not merge while checks are pending, failed, cancelled, or skipped when they are required. If CI fails, fix the cause and wait for a green run before merging.
